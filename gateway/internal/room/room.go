@@ -76,23 +76,39 @@ func (r *Room) Run() {
 	for {
 		select {
 		case <-r.done:
+			r.drain()
 			return
 		case msg := <-r.ops:
-			r.mu.Lock()
-			targets := make([]*client.Client, 0, len(r.clients))
-			for c := range r.clients {
-				if c != msg.Sender {
-					targets = append(targets, c)
-				}
-			}
-			r.mu.Unlock()
+			r.broadcast(msg)
+		}
+	}
+}
 
-			for _, c := range targets {
-				if !c.Send(msg.Data) {
-					log.Printf("[room] %s: disconnecting slow client %s", r.ID, c.ID)
-					c.ForceClose()
-				}
-			}
+func (r *Room) broadcast(msg BroadcastMsg) {
+	r.mu.Lock()
+	targets := make([]*client.Client, 0, len(r.clients))
+	for c := range r.clients {
+		if c != msg.Sender {
+			targets = append(targets, c)
+		}
+	}
+	r.mu.Unlock()
+
+	for _, c := range targets {
+		if !c.Send(msg.Data) {
+			log.Printf("[room] %s: disconnecting slow client %s", r.ID, c.ID)
+			c.ForceClose()
+		}
+	}
+}
+
+func (r *Room) drain() {
+	for {
+		select {
+		case msg := <-r.ops:
+			r.broadcast(msg)
+		default:
+			return
 		}
 	}
 }
