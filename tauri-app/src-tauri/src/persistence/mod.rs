@@ -139,7 +139,7 @@ pub fn list_documents(app: &AppHandle) -> Result<Vec<DocumentMeta>, PersistError
         });
     }
 
-    docs.sort_by(|a, b| b.modified.cmp(&a.modified));
+    docs.sort_by_key(|d| std::cmp::Reverse(d.modified));
     Ok(docs)
 }
 
