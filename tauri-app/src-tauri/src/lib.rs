@@ -1,6 +1,7 @@
 mod app_config;
 mod crdt;
 mod debug;
+mod persistence;
 mod processes;
 mod session;
 mod state;
@@ -49,6 +50,11 @@ pub fn run() {
             session::command::get_session_info,
             identity::get_identity,
             identity::set_username,
+            persistence::commands::save_document,
+            persistence::commands::load_document,
+            persistence::commands::list_saved_documents,
+            persistence::commands::fork_document,
+            persistence::commands::delete_document,
             #[cfg(debug_assertions)]
             crdt_handler::toggle_crdt_logging
         ])

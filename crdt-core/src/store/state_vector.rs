@@ -34,4 +34,16 @@ impl StateVector {
         let seen = self.get(&id.client);
         seen == id.clock.value
     }
+
+    /// Iterate over all (ClientId, clock_ceiling) entries
+    pub fn iter(&self) -> impl Iterator<Item = (&ClientId, &u64)> {
+        self.state_map.iter()
+    }
+
+    /// Reconstruct a StateVector from serialized entries
+    pub fn from_entries(entries: Vec<(ClientId, u64)>) -> Self {
+        Self {
+            state_map: entries.into_iter().collect(),
+        }
+    }
 }
