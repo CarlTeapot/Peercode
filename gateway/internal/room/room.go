@@ -56,14 +56,12 @@ func (r *Room) Leave(c *client.Client, onEmpty func()) {
 	delete(r.clients, c)
 	c.CloseSend()
 	empty := len(r.clients) == 0
-	size := len(r.clients)
 	if empty {
 		r.closed = true
 		close(r.done)
 		slog.Info("room marked closed after last client left", "room_id", r.ID)
 	}
 	r.mu.Unlock()
-	slog.Info("client removed from room", "room_id", r.ID, "client_id", c.ID, "size", size)
 
 	if empty && onEmpty != nil {
 		slog.Debug("invoking room onEmpty callback", "room_id", r.ID)

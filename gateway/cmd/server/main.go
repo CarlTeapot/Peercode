@@ -67,7 +67,6 @@ func main() {
 		}
 	}
 }
-
 func parseGatewayLogLevel(raw string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "debug", "trace":
