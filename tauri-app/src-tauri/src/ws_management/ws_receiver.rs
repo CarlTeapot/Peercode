@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use futures_util::StreamExt;
+use log::{debug, info, warn};
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::tungstenite::Message;
 
@@ -12,21 +13,30 @@ pub async fn receive_loop(
     connection: Arc<Mutex<WsConnection>>,
     write_tx: Arc<RwLock<Option<Arc<mpsc::Sender<Message>>>>>,
 ) {
+    info!("ws receiver loop started");
     while let Some(result) = stream.next().await {
         match result {
             Ok(Message::Text(text)) => {
-                eprintln!("[ws recv] text: {text}");
+                debug!("ws recv text (len={}): {text}", text.len());
             }
             Ok(Message::Binary(bytes)) => {
-                eprintln!("[ws recv] binary ({} bytes): {:?}", bytes.len(), bytes);
+                debug!("ws receiver binary message (bytes={})", bytes.len());
             }
-            Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)) => {}
+            Ok(Message::Ping(_)) => {
+                debug!("ws receiver ping");
+            }
+            Ok(Message::Pong(_)) => {
+                debug!("ws receiver pong");
+            }
+            Ok(Message::Frame(_)) => {
+                debug!("ws receiver raw frame");
+            }
             Ok(Message::Close(_)) => {
-                eprintln!("[ws recv] server closed connection");
+                info!("ws recv: server closed connection");
                 break;
             }
             Err(e) => {
-                eprintln!("[ws recv] error: {e}");
+                warn!("ws recv error: {e}");
                 break;
             }
         }
@@ -36,6 +46,7 @@ pub async fn receive_loop(
     if matches!(*guard, WsConnection::Connected { .. }) {
         *write_tx.write().unwrap() = None;
         *guard = WsConnection::Disconnected;
-        eprintln!("[ws recv] connection lost — state reset to Disconnected");
+        warn!("ws recv connection lost; state reset to Disconnected");
     }
+    info!("ws recv loop stopped");
 }

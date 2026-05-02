@@ -1,12 +1,18 @@
 package room
 
 import (
+	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"gateway/internal/client"
 )
+
+func init() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
+}
 
 func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
 	r := New("room-1")

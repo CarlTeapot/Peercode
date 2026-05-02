@@ -1,4 +1,5 @@
 use crate::state::appstate::AppState;
+use log::info;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
@@ -14,7 +15,7 @@ pub fn spawn_linked_list_logger(app_handle: tauri::AppHandle) {
                 let document = state.document.lock().unwrap();
                 document.debug_linked_list()
             };
-            println!("CRDT linked list: {}", text);
+            info!("CRDT linked list: {}", text);
         }
         thread::sleep(Duration::from_secs(1));
     });

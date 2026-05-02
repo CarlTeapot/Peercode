@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,9 +16,16 @@ import (
 )
 
 func main() {
+	level := parseGatewayLogLevel(os.Getenv("GATEWAY_LOG_LEVEL"))
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	}))
+	slog.SetDefault(logger)
+	slog.Info("gateway logger initialized", "level", level.String())
+
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "listen: %v\n", err)
+		slog.Error("failed to bind listener", "error", err)
 		os.Exit(1)
 	}
 
@@ -37,6 +46,7 @@ func main() {
 		serveErr <- srv.Serve(ln)
 	}()
 
+	slog.Info("gateway started", "port", port)
 	fmt.Printf("{\"port\":%d}\n", port)
 
 	sig := make(chan os.Signal, 1)
@@ -44,11 +54,30 @@ func main() {
 
 	select {
 	case err := <-serveErr:
-		fmt.Fprintf(os.Stderr, "serve: %v\n", err)
-		os.Exit(1)
+		if err != nil && err != http.ErrServerClosed {
+			slog.Error("gateway serve failed", "error", err)
+			os.Exit(1)
+		}
 	case <-sig:
+		slog.Info("shutdown signal received")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(ctx)
+		if err := srv.Shutdown(ctx); err != nil {
+			slog.Error("graceful shutdown failed", "error", err)
+		}
+	}
+}
+func parseGatewayLogLevel(raw string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "debug", "trace":
+		return slog.LevelDebug
+	case "info", "":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error", "off":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }

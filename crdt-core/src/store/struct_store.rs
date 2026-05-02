@@ -2,6 +2,7 @@ use crate::store::StateVector;
 use crate::structs::Block;
 
 use crate::types::{BlockId, ClientId};
+use log::debug;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
@@ -23,6 +24,7 @@ impl StructStore {
     }
 
     pub fn insert(&mut self, block: Block) {
+        debug!("inserting block {:?}", block);
         let list = self.blocks.entry(block.id.client).or_default();
         let pos = list.partition_point(|b| b.id.clock.value < block.id.clock.value);
         list.insert(pos, block);
@@ -51,6 +53,7 @@ impl StructStore {
     }
 
     pub fn mark_deleted(&mut self, id: &BlockId) -> Option<&mut Block> {
+        debug!("marking deleted block {:?}", id);
         let block = self.get_mut(id)?;
         if !block.is_deleted {
             block.is_deleted = true;
@@ -59,6 +62,7 @@ impl StructStore {
     }
 
     pub fn erase_content(&mut self, id: &BlockId) -> bool {
+        debug!("erase content block {:?}", id);
         match self.get_mut(id) {
             Some(block) if block.is_deleted && !block.is_empty() => {
                 block.clear_content_for_gc();

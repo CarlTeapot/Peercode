@@ -1,10 +1,9 @@
-use std::mem;
-
 use super::{Document, RemoteChange};
 use crate::error::DocumentError;
 use crate::store::DeleteSet;
 use crate::structs::Block;
 use crate::types::{BlockId, Clock};
+use std::mem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BlockReadiness {

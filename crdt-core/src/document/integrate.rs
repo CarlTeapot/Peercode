@@ -2,6 +2,7 @@ use super::Document;
 use crate::error::DocumentError;
 use crate::structs::Block;
 use crate::types::BlockId;
+use log::{debug, trace};
 
 impl Document {
     fn find_insert_position(&self, block: &Block) -> Result<Option<BlockId>, DocumentError> {
@@ -23,6 +24,10 @@ impl Document {
 
         while let Some(curr_id) = scanning_id {
             if Some(curr_id) == right {
+                trace!(
+                    "insert-position outcome: reached right boundary {:?}",
+                    right
+                );
                 break;
             }
 
@@ -42,10 +47,18 @@ impl Document {
             };
 
             if ol_is_left_of_ours {
+                trace!(
+                    "insert-position outcome: stop before {:?} due to non-crossing-origin rule",
+                    curr_id
+                );
                 break;
             }
 
             if o_l == block.origin_left && block.id.client.value < curr_block.id.client.value {
+                trace!(
+                    "insert-position outcome: stop before {:?} due to client tie-break (incoming={} < existing={})",
+                    curr_id, block.id.client.value, curr_block.id.client.value
+                );
                 break;
             }
 
@@ -53,6 +66,10 @@ impl Document {
             scanning_id = curr_block.right();
         }
 
+        debug!(
+            "insert-position outcome: block {:?} resolved with left neighbor {:?}",
+            block.id, left
+        );
         Ok(left)
     }
 
@@ -85,6 +102,12 @@ impl Document {
             .ok_or(DocumentError::BlockNotFound(block_id))?;
         b_mut.set_left(final_left);
         b_mut.set_right(final_right);
+        debug!(
+            "link-block outcome: {:?} linked between left={:?} and right={:?}",
+            block_id,
+            b_mut.left(),
+            b_mut.right()
+        );
 
         Ok(())
     }
@@ -92,6 +115,10 @@ impl Document {
     /// Insert `block` into the store and link it.
     pub(super) fn integrate(&mut self, block: Block) -> Result<BlockId, DocumentError> {
         let block_id = block.id;
+        debug!(
+            "integrate start: id={:?}, origin_left={:?}, origin_right={:?}, len={}",
+            block_id, block.origin_left, block.origin_right, block.len
+        );
 
         let final_left = self.find_insert_position(&block)?;
         let final_right = if let Some(l_id) = final_left {
@@ -102,9 +129,12 @@ impl Document {
         } else {
             self.head
         };
-
         self.store.insert(block);
         self.link_block(block_id, final_left, final_right)?;
+        debug!(
+            "integrate outcome: block {:?} inserted with neighbors left={:?}, right={:?}",
+            block_id, final_left, final_right
+        );
 
         Ok(block_id)
     }
@@ -123,6 +153,10 @@ impl Document {
                 .ok_or(DocumentError::BlockNotFound(block_id))?;
 
             if offset == 0 || offset >= block.len {
+                trace!(
+                    "split outcome: no-op for {:?} because offset={} is outside 1..{}",
+                    block_id, offset, block.len
+                );
                 return Ok(None);
             };
 
@@ -159,6 +193,10 @@ impl Document {
                 .set_left(Some(new_block_id));
         }
 
+        debug!(
+            "split outcome: {:?} split at offset {} creating {:?}",
+            block_id, offset, new_block_id
+        );
         Ok(Some(new_block_id))
     }
 
@@ -167,15 +205,26 @@ impl Document {
     fn ensure_block_split_at(&mut self, id: BlockId) -> Result<(), DocumentError> {
         let block = match self.store.get(&id) {
             Some(b) => b,
-            None => return Ok(()),
+            None => {
+                trace!("ensure-split outcome: no-op, target {:?} not found", id);
+                return Ok(());
+            }
         };
         let block_start = block.id.clock.value;
         if block_start == id.clock.value {
+            trace!(
+                "ensure-split outcome: no-op, target {:?} already aligned",
+                id
+            );
             return Ok(());
         }
         let offset = id.clock.value - block_start;
         let block_id = block.id;
         self.split_block(block_id, offset)?;
+        debug!(
+            "ensure-split outcome: split source {:?} at offset {} for target {:?}",
+            block_id, offset, id
+        );
         Ok(())
     }
 
@@ -190,6 +239,10 @@ impl Document {
         if let Some(or_id) = block.origin_right {
             self.ensure_block_split_at(or_id)?;
         }
+        debug!(
+            "pre-split outcome: prepared boundaries for block {:?} (left={:?}, right={:?})",
+            block.id, block.origin_left, block.origin_right
+        );
         Ok(())
     }
 }

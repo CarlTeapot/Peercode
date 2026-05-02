@@ -1,9 +1,9 @@
-use std::error::Error;
-use std::fmt;
-
 use crate::store::DeleteSet;
 use crate::structs::Block;
 use crate::types::BlockId;
+use log::trace;
+use std::error::Error;
+use std::fmt;
 
 pub const OP_PREFIX: u8 = 0x00;
 pub const SNAPSHOT_PREFIX: u8 = 0x01;
@@ -72,14 +72,17 @@ impl Error for WireError {
 }
 
 pub fn encode_op(msg: &OpMessage) -> Vec<u8> {
+    trace!("encode operation requested: {:?}", msg);
     let payload = bitcode::encode(msg);
     let mut frame = Vec::with_capacity(1 + payload.len());
     frame.push(OP_PREFIX);
     frame.extend_from_slice(&payload);
+    trace!("encode frame encoded: {frame:?}");
     frame
 }
 
 pub fn decode_op(frame: &[u8]) -> Result<OpMessage, WireError> {
+    trace!("decode operation requested: {:?}", frame);
     let (&prefix, payload) = frame.split_first().ok_or(WireError::EmptyFrame)?;
     match prefix {
         OP_PREFIX => bitcode::decode(payload).map_err(WireError::Decode),

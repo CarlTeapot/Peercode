@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -37,10 +37,12 @@ func (h *Hub) newRoomID() string {
 
 func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		slog.Warn("create room rejected: method not allowed", "method", r.Method)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	id := h.newRoomID()
+	slog.Info("room id generated", "room_id", id)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"room_id": id})
 }
@@ -53,6 +55,9 @@ func (h *Hub) getOrCreateRoom(id string) *room.Room {
 		r = room.New(id)
 		h.rooms[id] = r
 		go r.Run()
+		slog.Info("room created", "room_id", id)
+	} else {
+		slog.Debug("room reused", "room_id", id, "size", r.Size())
 	}
 	return r
 }
@@ -62,6 +67,9 @@ func (h *Hub) discardIfStale(id string, r *room.Room) {
 	defer h.mu.Unlock()
 	if h.rooms[id] == r {
 		delete(h.rooms, id)
+		slog.Info("room discarded from hub", "room_id", id)
+	} else {
+		slog.Debug("discard skipped: room reference is stale", "room_id", id)
 	}
 }
 
@@ -69,24 +77,38 @@ func (h *Hub) register(c *client.Client) *room.Room {
 	for {
 		r := h.getOrCreateRoom(c.RoomID)
 		if r.Join(c) {
+			slog.Info(
+				"client registered to room",
+				"room_id", c.RoomID,
+				"client_id", c.ID,
+				"size", r.Size(),
+			)
 			return r
 		}
+		slog.Warn(
+			"room join failed; retrying after stale room cleanup",
+			"room_id", c.RoomID,
+			"client_id", c.ID,
+		)
 		h.discardIfStale(c.RoomID, r)
 	}
 }
 
 func (h *Hub) unregister(c *client.Client, r *room.Room) {
+	slog.Debug("unregistering client from room", "room_id", r.ID, "client_id", c.ID)
 	r.Leave(c, func() { h.discardIfStale(r.ID, r) })
 }
 
 func readWSParams(w http.ResponseWriter, r *http.Request) (roomID, clientID string, ok bool) {
 	roomID = r.URL.Query().Get("room")
 	if roomID == "" {
+		slog.Warn("websocket rejected: missing room parameter")
 		http.Error(w, "missing ?room= parameter", http.StatusBadRequest)
 		return "", "", false
 	}
 	clientID = r.URL.Query().Get("client_id")
 	if clientID == "" {
+		slog.Warn("websocket rejected: missing client_id parameter", "room_id", roomID)
 		http.Error(w, "missing ?client_id= parameter", http.StatusBadRequest)
 		return "", "", false
 	}
@@ -95,7 +117,13 @@ func readWSParams(w http.ResponseWriter, r *http.Request) (roomID, clientID stri
 
 func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 	if _, err := wire.DecodeOpFrame(raw); err != nil {
-		log.Printf("[gateway] drop frame room=%s client=%s: %v", sender.RoomID, sender.ID, err)
+		slog.Warn(
+			"dropping invalid frame",
+			"room_id", rm.ID,
+			"client_id", sender.ID,
+			"error", err,
+			"bytes", len(raw),
+		)
 		return
 	}
 
@@ -103,6 +131,7 @@ func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 
 	select {
 	case rm.Ops() <- msg:
+		slog.Debug("frame dispatched to room ops queue", "room_id", rm.ID, "client_id", sender.ID, "bytes", len(raw))
 		return
 	default:
 	}
@@ -111,8 +140,19 @@ func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 	defer t.Stop()
 	select {
 	case rm.Ops() <- msg:
+		slog.Debug(
+			"frame dispatched to room ops queue after short wait",
+			"room_id", rm.ID,
+			"client_id", sender.ID,
+			"bytes", len(raw),
+		)
 	case <-t.C:
-		log.Printf("[gateway] ops buffer full room=%s client=%s; dropping frame", sender.RoomID, sender.ID)
+		slog.Warn(
+			"room ops buffer full; dropping frame after timeout",
+			"room_id", rm.ID,
+			"client_id", sender.ID,
+			"bytes", len(raw),
+		)
 	}
 }
 
@@ -126,16 +166,17 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		log.Printf("[gateway] upgrade failed room=%s: %v", roomID, err)
+		slog.Warn("websocket upgrade failed", "room_id", roomID, "error", err)
 		return
 	}
+	slog.Info("websocket upgraded", "room_id", roomID, "client_id", clientID)
 
 	c := client.New(clientID, roomID, conn)
 	rm := h.register(c)
-	log.Printf("[gateway] join  room=%s client=%s size=%d", roomID, clientID, rm.Size())
+	slog.Info("client joined room", "room_id", roomID, "client_id", clientID, "size", rm.Size())
 	defer func() {
 		h.unregister(c, rm)
-		log.Printf("[gateway] leave room=%s client=%s", roomID, clientID)
+		slog.Info("client left room", "room_id", roomID, "client_id", clientID)
 	}()
 
 	ctx := r.Context()
@@ -148,10 +189,13 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case raw := <-ops:
+			slog.Debug("received websocket frame from client", "room_id", roomID, "client_id", clientID, "bytes", len(raw))
 			dispatchFrame(rm, c, raw)
 		case <-leave:
+			slog.Info("client signaled leave from read pump", "room_id", roomID, "client_id", clientID)
 			return
 		case <-ctx.Done():
+			slog.Info("websocket handler context cancelled", "room_id", roomID, "client_id", clientID, "error", ctx.Err())
 			return
 		}
 	}

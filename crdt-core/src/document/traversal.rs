@@ -1,8 +1,10 @@
 use super::Document;
 use crate::types::BlockId;
+use log::{debug, trace};
 
 impl Document {
     pub fn get_text(&self) -> String {
+        trace!("fetching document visible text");
         let mut text = String::new();
         let mut curr = self.head;
 
@@ -35,6 +37,7 @@ impl Document {
 
     #[cfg(debug_assertions)]
     pub fn debug_linked_list(&self) -> String {
+        trace!("fetching document linked list visualization");
         let mut parts = Vec::new();
         let mut curr = self.head;
         let max_steps = self.store.total_blocks().saturating_add(1);
@@ -99,6 +102,8 @@ impl Document {
         &self,
         mut position: u64,
     ) -> (Option<BlockId>, u64, Option<BlockId>) {
+        debug!("get_block_and_offset_by_position({:?})", position);
+
         let mut current_block = self.head.and_then(|id| self.store.get(&id));
         let mut tail_id = None;
 
@@ -109,16 +114,20 @@ impl Document {
                 current_block = block.right().and_then(|id| self.store.get(&id));
                 continue;
             }
-
             let content_len = block.len;
 
             if position < content_len {
+                debug!("position: {}, content_len: {}", position, content_len);
                 return (Some(block.id), position, None);
             }
             position -= content_len;
             current_block = block.right().and_then(|id| self.store.get(&id));
         }
 
+        debug!(
+            "get_block_and_offset_by_position({:?}) returned a tail block",
+            position
+        );
         (None, position, tail_id)
     }
 }

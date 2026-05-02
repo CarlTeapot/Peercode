@@ -1,4 +1,5 @@
 use crate::types::{BlockId, ClientId};
+use log::debug;
 use std::collections::HashMap;
 
 // StateVector struct to represent the state of seen blocks for each client.
@@ -20,6 +21,7 @@ impl StateVector {
 
     /// Update the state vector after integrating a block.
     pub fn update(&mut self, client: ClientId, end_clock: u64) {
+        debug!("Updating state vector for client {}.", client.value);
         let entry = self.state_map.entry(client).or_insert(0);
         *entry = (*entry).max(end_clock);
     }
