@@ -1,4 +1,4 @@
-.PHONY: help install install-linux-deps clean reset-identity
+.PHONY: help install install-linux-deps clean reset-identity install-git-hooks
 
 include build/make/build.mk
 include build/make/test.mk
@@ -23,3 +23,6 @@ clean:
 	rm -rf tauri-app/src-tauri/target
 	rm -rf crdt-core/target
 	rm -rf gateway/bin
+
+install-git-hooks:
+	install -m 0755 build/scripts/pre-push .git/hooks/pre-push
