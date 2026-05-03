@@ -4,3 +4,7 @@ connect_timeout_ms = 5000
 [logging]
 show_gateway_logs = true
 show_cloudflared_logs = false
+tauri_file_logs = true
+tauri_log_level = "info"
+gateway_log_level = "info"
+tunnel_log_level = "info"

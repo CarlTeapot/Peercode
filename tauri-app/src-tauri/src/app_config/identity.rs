@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
@@ -36,7 +37,9 @@ fn persist(app: &AppHandle, identity: &PersistedIdentity) -> Result<(), String> 
     let tmp = path.with_file_name(".identity.toml.tmp");
     let serialized = toml::to_string_pretty(identity).map_err(|e| e.to_string())?;
     fs::write(&tmp, serialized).map_err(|e| e.to_string())?;
-    fs::rename(tmp, path).map_err(|e| e.to_string())
+    fs::rename(tmp, path)
+        .map_err(|e| e.to_string())
+        .map(|_| info!("identity persisted successfully"))
 }
 
 pub fn sanitize_username(raw: &str) -> Option<String> {
@@ -56,6 +59,10 @@ pub struct IdentityDto {
 #[tauri::command]
 pub fn get_identity(app: AppHandle) -> Result<IdentityDto, String> {
     let id = load_raw(&app)?;
+    debug!(
+        "get_identity completed: has_username={}",
+        id.username.is_some()
+    );
     Ok(IdentityDto {
         username: id.username,
     })
@@ -63,6 +70,10 @@ pub fn get_identity(app: AppHandle) -> Result<IdentityDto, String> {
 
 #[tauri::command]
 pub fn set_username(app: AppHandle, username: String) -> Result<(), String> {
+    info!(
+        "set_username requested: input_len={}",
+        username.chars().count()
+    );
     let clean = sanitize_username(&username).ok_or("username must not be empty")?;
     persist(
         &app,

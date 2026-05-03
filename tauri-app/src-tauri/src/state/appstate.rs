@@ -1,5 +1,6 @@
 use crdt_core::types::ClientId;
 use crdt_core::Document;
+use log::{info, warn};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri_plugin_shell::process::CommandChild;
@@ -37,7 +38,6 @@ impl AppRole {
         }
     }
 
-    /// Returns true when a session may still be initiated (no active session yet).
     pub fn can_initiate_session(&self) -> bool {
         matches!(self, Self::Undecided | Self::Starting)
     }
@@ -69,17 +69,32 @@ impl AppState {
     }
 
     pub fn teardown_host(&self) {
+        info!("teardown_host requested");
         let mut role = self.role.lock().unwrap();
+        let previous_status = role.status();
         if matches!(*role, AppRole::Starting | AppRole::Host { .. }) {
             *role = AppRole::Undecided;
+            info!(
+                "teardown_host role reset to idle from status={}",
+                previous_status
+            );
         }
 
         let mut procs = self.processes.lock().unwrap();
         if let Some(child) = procs.tunnel.take() {
-            let _ = child.kill();
+            if let Err(e) = child.kill() {
+                warn!("teardown_host failed to kill tunnel process: {}", e);
+            } else {
+                info!("teardown_host killed tunnel process");
+            }
         }
         if let Some(child) = procs.gateway.take() {
-            let _ = child.kill();
+            if let Err(e) = child.kill() {
+                warn!("teardown_host failed to kill gateway process: {}", e);
+            } else {
+                info!("teardown_host killed gateway process");
+            }
         }
+        info!("teardown_host completed");
     }
 }
