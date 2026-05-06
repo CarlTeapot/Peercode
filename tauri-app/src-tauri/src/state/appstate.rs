@@ -9,6 +9,7 @@ pub struct AppState {
     pub document: Mutex<Document>,
     pub role: Mutex<AppRole>,
     pub processes: Mutex<HostProcesses>,
+    pub current_document_name: Mutex<Option<String>>,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
 }
@@ -56,9 +57,15 @@ impl AppState {
                 gateway: None,
                 tunnel: None,
             }),
+            current_document_name: Mutex::new(None),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
         }
+    }
+
+    pub fn replace_document(&self, doc: Document) {
+        let mut current = self.document.lock().unwrap();
+        *current = doc;
     }
 
     pub fn teardown_host(&self) {

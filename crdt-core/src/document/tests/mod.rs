@@ -856,3 +856,127 @@ fn wire_block_round_trip_reconstructs_identical_document() {
     doc_b.remote_insert(Block::from(decoded)).unwrap();
     assert_eq!(doc_b.get_text(), "hi");
 }
+
+#[test]
+fn snapshot_empty_document_round_trips() {
+    use crate::snapshot::Snapshot;
+
+    let doc = Document::new(ClientId::new(1));
+    let snap = doc.to_snapshot();
+    let bytes = snap.encode();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
+
+    assert_eq!(restored.get_text(), "");
+    assert_eq!(restored.client_id, ClientId::new(1));
+}
+
+#[test]
+fn snapshot_with_content_round_trips() {
+    use crate::snapshot::Snapshot;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello ").unwrap();
+    doc.local_insert(6, "world").unwrap();
+    assert_eq!(doc.get_text(), "hello world");
+
+    let snap = doc.to_snapshot();
+    let bytes = snap.encode();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
+
+    assert_eq!(restored.get_text(), "hello world");
+    assert_eq!(restored.client_id, ClientId::new(1));
+}
+
+#[test]
+fn snapshot_preserves_deletions() {
+    use crate::snapshot::Snapshot;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "abcde").unwrap();
+    doc.delete(1, 3).unwrap();
+    assert_eq!(doc.get_text(), "ae");
+
+    let snap = doc.to_snapshot();
+    let bytes = snap.encode();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
+
+    assert_eq!(restored.get_text(), "ae");
+}
+
+#[test]
+fn snapshot_preserves_state_vector() {
+    use crate::snapshot::Snapshot;
+
+    let mut doc = Document::new(ClientId::new(42));
+    doc.local_insert(0, "abc").unwrap();
+
+    let snap = doc.to_snapshot();
+    let bytes = snap.encode();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
+
+    assert_eq!(restored.state_vector.get(&ClientId::new(42)), 3);
+}
+
+#[test]
+fn snapshot_can_accept_new_inserts_after_load() {
+    use crate::snapshot::Snapshot;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello").unwrap();
+
+    let snap = doc.to_snapshot();
+    let bytes = snap.encode();
+    let mut restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
+
+    restored.local_insert(5, " world").unwrap();
+    assert_eq!(restored.get_text(), "hello world");
+}
+
+#[test]
+fn fork_creates_independent_copy_with_new_client_id() {
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "original").unwrap();
+
+    let fork = doc.fork(ClientId::new(99));
+
+    assert_eq!(fork.client_id, ClientId::new(99));
+    assert_eq!(fork.get_text(), "original");
+    assert_eq!(doc.get_text(), "original");
+    assert_eq!(doc.client_id, ClientId::new(1));
+}
+
+#[test]
+fn fork_diverges_independently() {
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "base").unwrap();
+
+    let mut fork = doc.fork(ClientId::new(2));
+    fork.local_insert(4, " fork").unwrap();
+    doc.local_insert(4, " original").unwrap();
+
+    assert_eq!(doc.get_text(), "base original");
+    assert_eq!(fork.get_text(), "base fork");
+}
+
+#[test]
+fn fork_clocks_do_not_collide() {
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "abc").unwrap();
+
+    let mut fork = doc.fork(ClientId::new(2));
+    let wire = fork.local_insert(3, "d").unwrap().unwrap();
+    assert_eq!(wire.id.client, ClientId::new(2));
+    assert_eq!(wire.id.clock.value, 0);
+}
+
+#[test]
+fn snapshot_version_mismatch_returns_error() {
+    use crate::snapshot::Snapshot;
+
+    let doc = Document::new(ClientId::new(1));
+    let mut snap = doc.to_snapshot();
+    snap.version = 255;
+    let bytes = bitcode::encode(&snap);
+    let result = Snapshot::decode(&bytes);
+    assert!(result.is_err());
+}

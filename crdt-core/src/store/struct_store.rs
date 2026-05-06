@@ -85,4 +85,19 @@ impl StructStore {
             None
         }
     }
+
+    pub fn all_blocks(&self) -> impl Iterator<Item = &Block> {
+        self.blocks.values().flat_map(|v| v.iter())
+    }
+
+    pub fn from_blocks(blocks: Vec<Block>) -> Self {
+        let mut map: HashMap<ClientId, Vec<Block>> = HashMap::new();
+        for block in blocks {
+            map.entry(block.id.client).or_default().push(block);
+        }
+        for list in map.values_mut() {
+            list.sort_unstable_by_key(|b| b.id.clock.value);
+        }
+        StructStore { blocks: map }
+    }
 }

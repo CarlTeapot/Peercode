@@ -1,6 +1,7 @@
 mod app_config;
 mod crdt;
 mod debug;
+mod persistence;
 mod processes;
 mod session;
 mod state;
@@ -79,6 +80,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             local_op_handler::insert,
             local_op_handler::delete,
@@ -90,6 +92,14 @@ pub fn run() {
             session::command::get_session_info,
             identity::get_identity,
             identity::set_username,
+            persistence::commands::save_document,
+            persistence::commands::load_document,
+            persistence::commands::list_saved_documents,
+            persistence::commands::fork_document,
+            persistence::commands::delete_document,
+            persistence::commands::get_document_text,
+            persistence::commands::get_current_document_name,
+            persistence::commands::save_text_file,
             #[cfg(debug_assertions)]
             local_op_handler::toggle_crdt_logging
         ])

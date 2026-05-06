@@ -71,7 +71,6 @@ interface UsernameGateProps {
 }
 
 export function UsernameGate({ children }: UsernameGateProps) {
-  // null = still checking; "" = checked, no username yet; string = ready
   const [username, setUsername] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
 

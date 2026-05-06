@@ -40,6 +40,29 @@ impl Block {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore(
+        id: BlockId,
+        origin_left: Option<BlockId>,
+        origin_right: Option<BlockId>,
+        left: Option<BlockId>,
+        right: Option<BlockId>,
+        content: String,
+        is_deleted: bool,
+    ) -> Self {
+        let len = content.chars().count() as u64;
+        Block {
+            id,
+            origin_left,
+            origin_right,
+            left,
+            right,
+            content,
+            is_deleted,
+            len,
+        }
+    }
+
     pub fn left(&self) -> Option<BlockId> {
         self.left
     }

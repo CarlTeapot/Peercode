@@ -87,3 +87,218 @@ body {
 .op-replace {
   color: #dcdcaa;
 }
+
+/* ── File Menu ─────────────────────────────────────────── */
+
+.file-menu-btn {
+  background: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 3px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-menu-btn:hover {
+  background: #454545;
+}
+
+.file-menu-current {
+  color: #7ab;
+  font-size: 11px;
+}
+
+.file-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 260px;
+  background: #1e1e2e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  font-family: monospace;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.file-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  text-align: left;
+}
+
+.file-dropdown-item:hover:not(:disabled) {
+  background: #2a2a4a;
+}
+
+.file-dropdown-item:disabled {
+  color: #555;
+  cursor: not-allowed;
+}
+
+.file-dropdown-separator {
+  height: 1px;
+  background: #333;
+  margin: 2px 0;
+}
+
+.file-dropdown-form {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-dropdown-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #eee;
+}
+
+.file-dropdown-subtitle {
+  font-size: 11px;
+  color: #888;
+}
+
+.file-dropdown-input-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-dropdown-input {
+  flex: 1;
+  background: #12121f;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #eee;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.file-dropdown-input:focus {
+  outline: none;
+  border-color: #4a7fd4;
+}
+
+.file-dropdown-ext {
+  color: #666;
+  font-size: 11px;
+}
+
+.file-dropdown-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.file-dropdown-btn {
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
+.file-dropdown-btn.primary {
+  background: #4a7fd4;
+  color: #fff;
+}
+
+.file-dropdown-btn.primary:hover:not(:disabled) {
+  background: #5a8fe4;
+}
+
+.file-dropdown-btn.primary:disabled {
+  background: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.file-dropdown-btn.secondary {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.file-dropdown-btn.secondary:hover {
+  background: #454545;
+}
+
+.file-dropdown-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.file-dropdown-doc {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #222;
+}
+
+.file-dropdown-doc:last-child {
+  border-bottom: none;
+}
+
+.file-dropdown-doc-name {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 7px 10px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-dropdown-doc-name:hover:not(:disabled) {
+  background: #2a2a4a;
+}
+
+.file-dropdown-doc-meta {
+  font-size: 10px;
+  color: #666;
+}
+
+.file-dropdown-doc-delete {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 10px;
+  line-height: 1;
+}
+
+.file-dropdown-doc-delete:hover {
+  color: #f48771;
+}
+
+.file-dropdown-error {
+  padding: 6px 14px;
+  color: #f77;
+  font-size: 11px;
+  border-top: 1px solid #333;
+}
