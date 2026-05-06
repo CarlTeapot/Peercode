@@ -1,3 +1,5 @@
+use std::fs;
+
 use crate::persistence;
 use crate::state::appstate::AppState;
 use crdt_core::types::ClientId;
@@ -63,7 +65,7 @@ pub fn fork_document(
     fork_snapshot.pending_blocks.clear();
     fork_snapshot.pending_delete_sets.clear();
 
-    let forked = crdt_core::Document::from_snapshot(fork_snapshot).map_err(|e| e.to_string())?;
+    let forked = crdt_core::Document::from_snapshot(fork_snapshot);
     let text = forked.get_text();
 
     persistence::save_named(&app, &new_name, &forked).map_err(|e| e.to_string())?;
@@ -79,7 +81,7 @@ pub fn delete_document(app: AppHandle, name: String) -> Result<(), String> {
     let dir = persistence::documents_dir(&app).map_err(|e| e.to_string())?;
     let path = dir.join(format!("{name}.pcdoc"));
     if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -97,5 +99,5 @@ pub fn get_current_document_name(state: State<'_, AppState>) -> Result<Option<St
 
 #[tauri::command]
 pub fn save_text_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, &content).map_err(|e| e.to_string())
+    fs::write(&path, &content).map_err(|e| e.to_string())
 }

@@ -864,7 +864,7 @@ fn snapshot_empty_document_round_trips() {
     let doc = Document::new(ClientId::new(1));
     let snap = doc.to_snapshot();
     let bytes = snap.encode();
-    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap()).unwrap();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
 
     assert_eq!(restored.get_text(), "");
     assert_eq!(restored.client_id, ClientId::new(1));
@@ -881,7 +881,7 @@ fn snapshot_with_content_round_trips() {
 
     let snap = doc.to_snapshot();
     let bytes = snap.encode();
-    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap()).unwrap();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
 
     assert_eq!(restored.get_text(), "hello world");
     assert_eq!(restored.client_id, ClientId::new(1));
@@ -898,7 +898,7 @@ fn snapshot_preserves_deletions() {
 
     let snap = doc.to_snapshot();
     let bytes = snap.encode();
-    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap()).unwrap();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
 
     assert_eq!(restored.get_text(), "ae");
 }
@@ -912,7 +912,7 @@ fn snapshot_preserves_state_vector() {
 
     let snap = doc.to_snapshot();
     let bytes = snap.encode();
-    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap()).unwrap();
+    let restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
 
     assert_eq!(restored.state_vector.get(&ClientId::new(42)), 3);
 }
@@ -926,7 +926,7 @@ fn snapshot_can_accept_new_inserts_after_load() {
 
     let snap = doc.to_snapshot();
     let bytes = snap.encode();
-    let mut restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap()).unwrap();
+    let mut restored = Document::from_snapshot(Snapshot::decode(&bytes).unwrap());
 
     restored.local_insert(5, " world").unwrap();
     assert_eq!(restored.get_text(), "hello world");

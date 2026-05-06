@@ -1,5 +1,5 @@
 use super::Document;
-use crate::snapshot::{SNAPSHOT_VERSION, Snapshot, SnapshotBlock, SnapshotError};
+use crate::snapshot::{SNAPSHOT_VERSION, Snapshot, SnapshotBlock};
 use crate::store::{StateVector, StructStore};
 use crate::structs::Block;
 use crate::types::ClientId;
@@ -27,20 +27,13 @@ impl Document {
         }
     }
 
-    pub fn from_snapshot(snap: Snapshot) -> Result<Self, SnapshotError> {
-        if snap.version != SNAPSHOT_VERSION {
-            return Err(SnapshotError::VersionMismatch {
-                expected: SNAPSHOT_VERSION,
-                got: snap.version,
-            });
-        }
-
+    pub fn from_snapshot(snap: Snapshot) -> Self {
         let blocks: Vec<Block> = snap.blocks.into_iter().map(Block::from).collect();
         let store = StructStore::from_blocks(blocks);
         let state_vector = StateVector::from_entries(snap.state_vector);
         let pending: Vec<Block> = snap.pending_blocks.into_iter().map(Block::from).collect();
 
-        Ok(Document::restore(
+        Document::restore(
             snap.client_id,
             store,
             state_vector,
@@ -49,7 +42,7 @@ impl Document {
             snap.head,
             pending,
             snap.pending_delete_sets,
-        ))
+        )
     }
 
     pub fn fork(&self, new_client_id: ClientId) -> Self {
@@ -57,6 +50,6 @@ impl Document {
         snap.client_id = new_client_id;
         snap.pending_blocks.clear();
         snap.pending_delete_sets.clear();
-        Document::from_snapshot(snap).expect("fork: snapshot round-trip failed")
+        Document::from_snapshot(snap)
     }
 }

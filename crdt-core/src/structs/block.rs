@@ -49,8 +49,8 @@ impl Block {
         right: Option<BlockId>,
         content: String,
         is_deleted: bool,
-        len: u64,
     ) -> Self {
+        let len = content.chars().count() as u64;
         Block {
             id,
             origin_left,
