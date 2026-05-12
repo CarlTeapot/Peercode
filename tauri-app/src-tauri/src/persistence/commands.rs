@@ -3,6 +3,7 @@ use std::fs;
 use crate::persistence;
 use crate::state::appstate::AppState;
 use crdt_core::types::ClientId;
+use crdt_core::Document;
 use rand::random;
 use tauri::{AppHandle, State};
 
@@ -100,4 +101,12 @@ pub fn get_current_document_name(state: State<'_, AppState>) -> Result<Option<St
 #[tauri::command]
 pub fn save_text_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
+    let client_id = state.document.lock().unwrap().client_id;
+    state.replace_document(Document::new(client_id));
+    *state.current_document_name.lock().unwrap() = None;
+    Ok(())
 }

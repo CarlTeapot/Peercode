@@ -93,14 +93,7 @@ func (r *Room) Run() {
 }
 
 func (r *Room) broadcast(msg BroadcastMsg) {
-	r.mu.Lock()
-	targets := make([]*client.Client, 0, len(r.clients))
-	for c := range r.clients {
-		if c != msg.Sender {
-			targets = append(targets, c)
-		}
-	}
-	r.mu.Unlock()
+	targets := r.getPeers(msg.Sender)
 
 	slog.Debug(
 		"broadcast dispatch prepared",
@@ -109,9 +102,30 @@ func (r *Room) broadcast(msg BroadcastMsg) {
 		"targets", len(targets),
 		"bytes", len(msg.Data),
 	)
+	r.sendToPeers(targets, msg.Data, "disconnecting slow client")
+}
+
+func (r *Room) BroadcastAll(data []byte) {
+	targets := r.getPeers(nil)
+	r.sendToPeers(targets, data, "slow client during BroadcastAll; force-closing")
+}
+
+func (r *Room) getPeers(exclude *client.Client) []*client.Client {
+	r.mu.Lock()
+	targets := make([]*client.Client, 0, len(r.clients))
+	for c := range r.clients {
+		if exclude == nil || c != exclude {
+			targets = append(targets, c)
+		}
+	}
+	r.mu.Unlock()
+	return targets
+}
+
+func (r *Room) sendToPeers(targets []*client.Client, data []byte, slowClientLogMsg string) {
 	for _, c := range targets {
-		if !c.Send(msg.Data) {
-			slog.Warn("disconnecting slow client", "room_id", r.ID, "client_id", c.ID)
+		if !c.Send(data) {
+			slog.Warn(slowClientLogMsg, "room_id", r.ID, "client_id", c.ID)
 			c.ForceClose()
 		}
 	}

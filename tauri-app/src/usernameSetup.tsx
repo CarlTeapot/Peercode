@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type React from "react";
-import { SessionSetupModal } from "./sessionSetup";
 
 const MAX_LEN = 32;
 
@@ -72,7 +71,6 @@ interface UsernameGateProps {
 
 export function UsernameGate({ children }: UsernameGateProps) {
   const [username, setUsername] = useState<string | null>(null);
-  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
     invoke<{ username: string | null }>("get_identity")
@@ -82,8 +80,6 @@ export function UsernameGate({ children }: UsernameGateProps) {
 
   if (username === null) return null;
   if (username === "") return <FirstRunModal onDone={setUsername} />;
-  if (!sessionReady)
-    return <SessionSetupModal onDone={() => setSessionReady(true)} />;
   return <>{children(username)}</>;
 }
 

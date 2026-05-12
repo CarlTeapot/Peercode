@@ -88,6 +88,7 @@ impl WsState {
             Arc::clone(&self.connection),
             Arc::clone(&self.write_tx),
             op_tx,
+            app.clone(),
         ));
         debug!("ws sender/receiver/processor tasks spawned");
 
@@ -128,29 +129,46 @@ impl WsState {
         }
     }
 
+    fn do_disconnect(
+        guard: &mut WsConnection,
+        write_tx: &RwLock<Option<Arc<mpsc::Sender<Message>>>>,
+    ) -> bool {
+        if let WsConnection::Connected {
+            receiver,
+            sender,
+            processor,
+            ..
+        } = guard
+        {
+            receiver.abort();
+            sender.abort();
+            processor.abort();
+            *write_tx.write().unwrap() = None;
+            *guard = WsConnection::Disconnected;
+            info!("websocket disconnected");
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn disconnect_nowait(&self) {
+        let connection = Arc::clone(&self.connection);
+        let write_tx = Arc::clone(&self.write_tx);
+        tauri::async_runtime::spawn(async move {
+            let mut guard = connection.lock().await;
+            Self::do_disconnect(&mut guard, &write_tx);
+        });
+    }
+
     pub async fn disconnect(&self) -> Result<(), WsError> {
         debug!("ws disconnect request received");
         let mut guard = self.connection.lock().await;
-        match &mut *guard {
-            WsConnection::Connected {
-                receiver,
-                sender,
-                processor,
-                ..
-            } => {
-                debug!("ws disconnect: aborting sender/receiver/processor tasks");
-                receiver.abort();
-                sender.abort();
-                processor.abort();
-                *self.write_tx.write().unwrap() = None;
-                *guard = WsConnection::Disconnected;
-                info!("websocket disconnected");
-                Ok(())
-            }
-            _ => {
-                warn!("ws disconnect rejected: no active connection");
-                Err(WsError::NotConnected)
-            }
+        if Self::do_disconnect(&mut guard, &self.write_tx) {
+            Ok(())
+        } else {
+            warn!("ws disconnect rejected: no active connection");
+            Err(WsError::NotConnected)
         }
     }
 }

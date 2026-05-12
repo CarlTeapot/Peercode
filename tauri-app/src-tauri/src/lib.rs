@@ -1,6 +1,7 @@
 mod app_config;
 mod crdt;
 mod debug;
+mod gateway;
 mod persistence;
 mod processes;
 mod session;
@@ -12,10 +13,11 @@ use crate::app_config::identity;
 use crate::crdt::local_op_handler;
 #[cfg(debug_assertions)]
 use crate::debug::document_logger::spawn_linked_list_logger;
-use crate::state::appstate::AppState;
+use crate::gateway::gateway_api::destroy_room;
+use crate::state::appstate::{AppRole, AppState};
 use crate::state::ws_state::WsState;
 use crdt_core::types::ClientId;
-use log::{debug, info};
+use log::{debug, info, warn};
 use rand::random;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
@@ -69,7 +71,21 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 info!("window destroyed; tearing down host resources");
-                window.state::<AppState>().teardown_host();
+                let state = window.state::<AppState>();
+                let local_room_url = {
+                    let role = state.role.lock().unwrap();
+                    match &*role {
+                        AppRole::Host { local_room_url, .. } => Some(local_room_url.clone()),
+                        _ => None,
+                    }
+                };
+                if let Some(url) = local_room_url {
+                    if let Err(e) = tauri::async_runtime::block_on(destroy_room(url)) {
+                        warn!("destroy_room on window close: {e}");
+                    }
+                }
+                state.leave_session(&window.state::<WsState>());
+                state.kill_host_processes();
             }
         })
         .plugin(tauri_plugin_opener::init())
@@ -84,12 +100,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             local_op_handler::insert,
             local_op_handler::delete,
-            session::command::start_host_session,
-            session::command::stop_host_session,
-            session::command::join_session,
-            session::command::disconnect_websocket,
-            session::command::parse_join_url,
-            session::command::get_session_info,
+            session::host_commands::host_session,
+            session::host_commands::end_session,
+            session::host_commands::kill_host_processes,
+            session::guest_commands::join_session,
+            session::guest_commands::parse_join_url,
+            session::joint_commands::get_session_info,
+            session::joint_commands::leave_session,
+            processes::commands::get_process_status,
             identity::get_identity,
             identity::set_username,
             persistence::commands::save_document,
@@ -100,6 +118,7 @@ pub fn run() {
             persistence::commands::get_document_text,
             persistence::commands::get_current_document_name,
             persistence::commands::save_text_file,
+            persistence::commands::reset_document,
             #[cfg(debug_assertions)]
             local_op_handler::toggle_crdt_logging
         ])

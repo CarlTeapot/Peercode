@@ -36,6 +36,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.HandleWS)
 	mux.HandleFunc("/rooms", h.HandleCreateRoom)
+	mux.HandleFunc("/end-session", h.HandleEndSession)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

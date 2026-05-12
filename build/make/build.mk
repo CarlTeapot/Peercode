@@ -33,13 +33,13 @@ MOLD_EXISTS := $(shell command -v mold >/dev/null 2>&1 && echo yes || echo no)
 RUSTFLAGS ?= $(if $(filter yes,$(MOLD_EXISTS)),-C link-arg=-fuse-ld=mold,)
 
 dev: install-rust-dev-tools $(CLOUDFLARED_BIN) $(GATEWAY_BIN)
-	cd tauri-app && RUSTC_WRAPPER=$(RUSTC_WRAPPER) RUSTFLAGS="$(RUSTFLAGS)" VITE_PORT=$(PORT) npx tauri dev --config '{"build":{"devUrl":"http://localhost:$(PORT)"}}'
+	cd tauri-app && RUSTC_WRAPPER=$(RUSTC_WRAPPER) RUSTFLAGS="$(RUSTFLAGS)" VITE_PORT=$(PORT) VITE_DEV_FEATURES=true npx tauri dev --config '{"build":{"devUrl":"http://localhost:$(PORT)"}}'
 
 $(FRONTEND_BUILD_OUT): $(FRONTEND_BUILD_INPUTS)
 	cd tauri-app && npm run build
 
 $(RUST_RELEASE_BIN): $(RUST_RELEASE_INPUTS)
-	cd tauri-app && npm run tauri build -- --no-bundle
+	cd tauri-app/src-tauri && RUSTC_WRAPPER=$(RUSTC_WRAPPER) RUSTFLAGS="$(RUSTFLAGS)" cargo build --release
 
 prod-build: $(CLOUDFLARED_BIN) $(GATEWAY_BIN) $(FRONTEND_BUILD_OUT) $(RUST_RELEASE_BIN)
 

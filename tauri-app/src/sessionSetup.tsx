@@ -24,7 +24,7 @@ export function SessionSetupModal({ onDone }: SessionSetupModalProps) {
     setBusy(true);
     setError("");
     try {
-      await invoke("start_host_session");
+      await invoke("host_session");
       onDone();
     } catch (err) {
       setError(String(err));

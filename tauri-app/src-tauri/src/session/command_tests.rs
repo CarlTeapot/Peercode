@@ -1,4 +1,4 @@
-use super::command::parse_join_url;
+use crate::session::guest_commands::parse_join_url;
 
 #[test]
 fn parses_default_ws_endpoint() {

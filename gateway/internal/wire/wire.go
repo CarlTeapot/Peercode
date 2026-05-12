@@ -8,7 +8,16 @@ import (
 const (
 	PrefixOp       byte = 0x00
 	PrefixSnapshot byte = 0x01
+	PrefixControl  byte = 0x02
 )
+
+const (
+	ControlSessionEnded byte = 0x01
+)
+
+func EncodeControlFrame(controlType byte) []byte {
+	return []byte{PrefixControl, controlType}
+}
 
 var (
 	ErrEmptyFrame           = errors.New("wire: empty frame")

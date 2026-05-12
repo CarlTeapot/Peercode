@@ -1,10 +1,10 @@
+use crate::processes::types::Sidecar;
+use crate::state::ws_state::WsState;
 use crdt_core::types::ClientId;
 use crdt_core::Document;
 use log::{info, warn};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
-use tauri_plugin_shell::process::CommandChild;
-
 pub struct AppState {
     pub document: Mutex<Document>,
     pub role: Mutex<AppRole>,
@@ -14,6 +14,7 @@ pub struct AppState {
     pub crdt_logging_enabled: AtomicBool,
 }
 
+#[derive(Clone)]
 pub enum AppRole {
     Undecided,
     Starting,
@@ -21,6 +22,8 @@ pub enum AppRole {
         room_id: String,
         lan_url: Option<String>,
         public_url: Option<String>,
+        local_room_url: String,
+        public_room_url: Option<String>,
     },
     Guest {
         room_id: String,
@@ -39,13 +42,13 @@ impl AppRole {
     }
 
     pub fn can_initiate_session(&self) -> bool {
-        matches!(self, Self::Undecided | Self::Starting)
+        matches!(self, Self::Undecided)
     }
 }
 
 pub struct HostProcesses {
-    pub gateway: Option<CommandChild>,
-    pub tunnel: Option<CommandChild>,
+    pub gateway: Option<Sidecar>,
+    pub tunnel: Option<Sidecar>,
 }
 
 impl AppState {
@@ -68,33 +71,31 @@ impl AppState {
         *current = doc;
     }
 
-    pub fn teardown_host(&self) {
-        info!("teardown_host requested");
-        let mut role = self.role.lock().unwrap();
-        let previous_status = role.status();
-        if matches!(*role, AppRole::Starting | AppRole::Host { .. }) {
+    pub fn leave_session(&self, ws: &WsState) {
+        let previous_role = {
+            let mut role = self.role.lock().unwrap();
+            let prev = role.clone();
             *role = AppRole::Undecided;
-            info!(
-                "teardown_host role reset to idle from status={}",
-                previous_status
-            );
-        }
+            prev
+        };
+        info!("role reset to idle from status={}", previous_role.status());
 
+        ws.disconnect_nowait();
+    }
+
+    pub fn kill_host_processes(&self) {
         let mut procs = self.processes.lock().unwrap();
-        if let Some(child) = procs.tunnel.take() {
-            if let Err(e) = child.kill() {
-                warn!("teardown_host failed to kill tunnel process: {}", e);
+        self.kill_proc(procs.tunnel.take());
+        self.kill_proc(procs.gateway.take());
+    }
+
+    fn kill_proc(&self, proc: Option<Sidecar>) {
+        if let Some(sidecar) = proc {
+            if let Err(e) = sidecar.proc.kill() {
+                warn!("failed to kill sidecar '{}': {}", sidecar.name, e);
             } else {
-                info!("teardown_host killed tunnel process");
+                info!("killed sidecar '{}'", sidecar.name);
             }
         }
-        if let Some(child) = procs.gateway.take() {
-            if let Err(e) = child.kill() {
-                warn!("teardown_host failed to kill gateway process: {}", e);
-            } else {
-                info!("teardown_host killed gateway process");
-            }
-        }
-        info!("teardown_host completed");
     }
 }

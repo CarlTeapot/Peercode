@@ -1,36 +1,9 @@
-use crate::processes::process_coordinator;
-use crate::session::session_types::{JoinInfo, SessionInfo};
+use crate::session::session_types::JoinInfo;
 use crate::state::appstate::{AppRole, AppState};
 use crate::state::ws_state::WsState;
-use log::{debug, error, info, warn};
-use tauri::{AppHandle, Manager, State};
+use log::{debug, info, warn};
+use tauri::{AppHandle, State};
 use url::Url;
-
-#[tauri::command]
-pub async fn start_host_session(app: AppHandle) -> Result<(), String> {
-    debug!("start_host_session requested");
-    {
-        let state = app.state::<AppState>();
-        let mut role = state.role.lock().unwrap();
-        if !role.can_initiate_session() {
-            warn!("start_host_session rejected: active session already exists");
-            return Err("A session is already active".into());
-        }
-        *role = AppRole::Starting;
-        debug!("start_host_session role set to Starting");
-    }
-
-    info!("start_host_session launching gateway/tunnel workflow");
-    let result = process_coordinator::launch(app.clone()).await?;
-    info!(
-        "start_host_session workflow ready: room_id={} port={}",
-        result.room_id, result.port
-    );
-
-    connect(app, result.port, result.room_id).await;
-    info!("start_host_session completed");
-    Ok(())
-}
 
 #[tauri::command]
 pub async fn join_session(
@@ -110,51 +83,6 @@ pub async fn join_session(
 }
 
 #[tauri::command]
-pub fn stop_host_session(state: State<'_, AppState>) -> Result<(), String> {
-    info!("stop_host_session requested");
-    state.teardown_host();
-    info!("stop_host_session completed");
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn disconnect_websocket(ws: State<'_, WsState>) -> Result<(), String> {
-    debug!("disconnect_websocket requested");
-    ws.disconnect().await.map_err(|e| {
-        warn!("disconnect_websocket failed: {e}");
-        e.to_string()
-    })?;
-    info!("disconnect_websocket completed");
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_session_info(state: State<'_, AppState>) -> SessionInfo {
-    let role = state.role.lock().unwrap();
-    let (lan_url, public_url, room_id) = match &*role {
-        AppRole::Host {
-            room_id,
-            lan_url,
-            public_url,
-            ..
-        } => (lan_url.clone(), public_url.clone(), Some(room_id.clone())),
-        AppRole::Guest {
-            room_id,
-            server_url,
-        } => (None, Some(server_url.clone()), Some(room_id.clone())),
-        _ => (None, None, None),
-    };
-    let info = SessionInfo {
-        status: role.status().into(),
-        lan_url,
-        public_url,
-        room_id,
-    };
-    debug!("get_session_info returned status={}", info.status);
-    info
-}
-
-#[tauri::command]
 pub fn parse_join_url(url: String) -> Result<JoinInfo, String> {
     debug!("parse_join_url requested");
     let parsed = Url::parse(&url).map_err(|e| format!("Invalid URL: {e}"))?;
@@ -210,31 +138,4 @@ pub fn parse_join_url(url: String) -> Result<JoinInfo, String> {
         info.server_url, info.room_id
     );
     Ok(info)
-}
-
-async fn connect(app: AppHandle, port: u16, room_id: String) {
-    debug!(
-        "host local connect requested: room_id={} port={}",
-        room_id, port
-    );
-    let host_client_id = {
-        let state = app.state::<AppState>();
-        let doc = state.document.lock().unwrap();
-        doc.client_id.value
-    };
-
-    let local_ws_url =
-        format!("ws://127.0.0.1:{port}/ws?room={room_id}&client_id={host_client_id}");
-    let ws = app.state::<WsState>();
-    if let Err(e) = ws
-        .connect(&local_ws_url, room_id.clone(), app.clone())
-        .await
-    {
-        error!("local websocket connection failed (session still running): {e}");
-    } else {
-        info!(
-            "local websocket connection established for host session: room_id={}",
-            room_id
-        );
-    }
 }

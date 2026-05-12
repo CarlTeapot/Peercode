@@ -1,5 +1,5 @@
 use crate::app_config::config::AppConfig;
-use crate::processes::types::TunnelWorkflowResult;
+use crate::processes::types::{Sidecar, SidecarStatus, TunnelWorkflowResult};
 use crate::state::appstate::{AppRole, AppState};
 use log::{debug, info, warn};
 use tauri::{AppHandle, Manager};
@@ -9,9 +9,8 @@ use tauri_plugin_shell::ShellExt;
 pub async fn run_cloudflared(
     app: &AppHandle,
     port: u16,
-    room_id: &str,
 ) -> Result<Option<TunnelWorkflowResult>, String> {
-    info!("cloudflared startup requested: port={port} room_id={room_id}");
+    info!("cloudflared startup requested: port={port}");
     let url_arg = format!("http://localhost:{port}");
     let tunnel_log_level = app.state::<AppConfig>().logging.tunnel_level_for_arg();
     debug!("cloudflared startup using log level: {}", tunnel_log_level);
@@ -32,7 +31,11 @@ pub async fn run_cloudflared(
         .spawn()
         .map_err(|e| format!("Failed to spawn cloudflared: {e}"))?;
 
-    app.state::<AppState>().processes.lock().unwrap().tunnel = Some(child);
+    app.state::<AppState>().processes.lock().unwrap().tunnel = Some(Sidecar {
+        proc: child,
+        name: "cloudflared".to_string(),
+        status: SidecarStatus::Enabled,
+    });
     debug!("cloudflared process handle stored in app state");
 
     while let Some(event) = rx.recv().await {
@@ -45,7 +48,7 @@ pub async fn run_cloudflared(
                 } else {
                     raw_url.replacen("http://", "ws://", 1)
                 };
-                let public_url = format!("{}/ws?room={}", ws_url, room_id);
+                let public_url = format!("{}/ws", ws_url);
                 info!("cloudflared tunnel URL discovered");
                 store_public_url(app, &public_url);
 

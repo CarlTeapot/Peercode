@@ -156,6 +156,30 @@ func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 	}
 }
 
+func (h *Hub) HandleEndSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	roomID := r.URL.Query().Get("room")
+	if roomID == "" {
+		http.Error(w, "missing ?room= parameter", http.StatusBadRequest)
+		return
+	}
+	h.mu.Lock()
+	rm, ok := h.rooms[roomID]
+	h.mu.Unlock()
+	if !ok {
+		slog.Warn("end-session: room not found", "room_id", roomID)
+		http.Error(w, "room not found", http.StatusNotFound)
+		return
+	}
+	frame := wire.EncodeControlFrame(wire.ControlSessionEnded)
+	rm.BroadcastAll(frame)
+	slog.Info("end-session: session-ended broadcast sent", "room_id", roomID)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	roomID, clientID, ok := readWSParams(w, r)
 	if !ok {
