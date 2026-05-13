@@ -4,12 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/coder/websocket"
 	"log/slog"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/coder/websocket"
 
 	"gateway/internal/client"
 	"gateway/internal/room"
@@ -17,6 +18,7 @@ import (
 )
 
 const stagingOpsBuffer = 64
+const maxRoomJoinRetries = 3
 
 type Hub struct {
 	mu    sync.Mutex
@@ -27,12 +29,12 @@ func New() *Hub {
 	return &Hub{rooms: make(map[string]*room.Room)}
 }
 
-func (h *Hub) newRoomID() string {
+func newRoomID() (string, error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "00000000"
+		return "", err
 	}
-	return hex.EncodeToString(b[:])
+	return hex.EncodeToString(b[:]), nil
 }
 
 func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +43,12 @@ func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	id := h.newRoomID()
+	id, err := newRoomID()
+	if err != nil {
+		slog.Error("create room failed: could not read random bytes", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 	slog.Info("room id generated", "room_id", id)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"room_id": id})
@@ -73,25 +80,40 @@ func (h *Hub) discardIfStale(id string, r *room.Room) {
 	}
 }
 
-func (h *Hub) register(c *client.Client) *room.Room {
-	for {
+func (h *Hub) register(c *client.Client) (*room.Room, error) {
+	for range maxRoomJoinRetries + 1 {
 		r := h.getOrCreateRoom(c.RoomID)
-		if r.Join(c) {
+		err := r.Join(c)
+		if err == nil {
 			slog.Info(
 				"client registered to room",
 				"room_id", c.RoomID,
 				"client_id", c.ID,
 				"size", r.Size(),
 			)
-			return r
+			return r, nil
 		}
-		slog.Warn(
-			"room join failed; retrying after stale room cleanup",
-			"room_id", c.RoomID,
-			"client_id", c.ID,
-		)
-		h.discardIfStale(c.RoomID, r)
+		if errors.Is(err, room.ErrDuplicateClientID) {
+			slog.Warn(
+				"duplicate client_id; rejecting websocket",
+				"room_id", c.RoomID,
+				"client_id", c.ID,
+			)
+			return nil, err
+		}
+		if errors.Is(err, room.ErrRoomClosed) {
+			slog.Warn(
+				"room join failed; retrying after stale room cleanup",
+				"room_id", c.RoomID,
+				"client_id", c.ID,
+			)
+			h.discardIfStale(c.RoomID, r)
+			continue
+		}
+		return nil, err
 	}
+	slog.Error("register failed: exceeded max retries", "room_id", c.RoomID, "client_id", c.ID)
+	return nil, fmt.Errorf("room %s unstable after %d attempts", c.RoomID, maxRoomJoinRetries)
 }
 
 func (h *Hub) unregister(c *client.Client, r *room.Room) {
@@ -196,7 +218,15 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	slog.Info("websocket upgraded", "room_id", roomID, "client_id", clientID)
 
 	c := client.New(clientID, roomID, conn)
-	rm := h.register(c)
+	rm, err := h.register(c)
+	if err != nil {
+		if errors.Is(err, room.ErrDuplicateClientID) {
+			_ = conn.Close(websocket.StatusPolicyViolation, "duplicate client_id")
+		} else {
+			_ = conn.Close(websocket.StatusInternalError, "join failed")
+		}
+		return
+	}
 	slog.Info("client joined room", "room_id", roomID, "client_id", clientID, "size", rm.Size())
 	defer func() {
 		h.unregister(c, rm)

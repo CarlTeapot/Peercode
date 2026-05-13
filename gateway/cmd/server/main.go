@@ -17,6 +17,12 @@ import (
 
 func main() {
 	level := parseGatewayLogLevel(os.Getenv("GATEWAY_LOG_LEVEL"))
+	authToken := os.Getenv("GATEWAY_AUTH_TOKEN")
+	if authToken == "" {
+		slog.Error("GATEWAY_AUTH_TOKEN is not set; refusing to start")
+		os.Exit(1)
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: level,
 	}))
@@ -34,14 +40,21 @@ func main() {
 	h := hub.New()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", h.HandleWS)
+	if rpm := parseWSRateLimitRPM(); rpm > 0 {
+		lim := newWSRateLimiter(rpm)
+		mux.Handle("/ws", wsRateLimitMiddleware(lim, h.HandleWS))
+		slog.Info("websocket rate limit enabled", "rpm", rpm)
+	} else {
+		mux.HandleFunc("/ws", h.HandleWS)
+		slog.Info("websocket rate limit disabled (GATEWAY_WS_RATE_LIMIT_RPM<=0)")
+	}
 	mux.HandleFunc("/rooms", h.HandleCreateRoom)
 	mux.HandleFunc("/end-session", h.HandleEndSession)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: bearerAuthFilter(authToken, mux)}
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- srv.Serve(ln)

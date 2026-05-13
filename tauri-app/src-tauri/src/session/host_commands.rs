@@ -1,7 +1,7 @@
 use crate::gateway::gateway_api::{create_room, destroy_room};
 use crate::processes::process_coordinator;
 use crate::processes::types::SidecarStatus;
-use crate::session::session_types::{SessionReadyPayload, SESSION_READY};
+use crate::session::session_types::{HostSessionSetup, SessionReadyPayload, SESSION_READY};
 use crate::state::appstate::{AppRole, AppState};
 use crate::state::document::{request, DocOp};
 use crate::state::ws_state::WsState;
@@ -9,15 +9,6 @@ use crdt_core::encode_snapshot;
 use log::{debug, error, info, warn};
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
-
-struct HostSessionSetup {
-    room_id: String,
-    port: u16,
-    lan_url: Option<String>,
-    public_url: Option<String>,
-    local_room_url: String,
-    public_room_url: Option<String>,
-}
 
 #[tauri::command]
 pub async fn host_session(app: AppHandle) -> Result<(), String> {
@@ -76,7 +67,11 @@ pub async fn end_session(state: State<'_, AppState>, ws: State<'_, WsState>) -> 
             }
         }
     };
-    destroy_room(local_room_url).await?;
+    let gateway_auth_token = state
+        .gateway_auth_token()
+        .ok_or_else(|| "Gateway auth token missing for running gateway process".to_string())?;
+
+    destroy_room(local_room_url, &gateway_auth_token).await?;
     state.leave_session(&ws);
     let previous_role = {
         let mut role = state.role.lock().unwrap();
@@ -116,7 +111,7 @@ fn ensure_gateway_spawn_allowed(app: &AppHandle) -> Result<(), String> {
 async fn prepare_host_session(app: &AppHandle) -> Result<HostSessionSetup, String> {
     info!("start_host_session launching gateway/tunnel workflow");
     let workflow = process_coordinator::launch(app.clone()).await?;
-    let room_id = create_room(workflow.port).await?;
+    let room_id = create_room(workflow.port, &workflow.gateway_auth_token).await?;
     let local_room_url = format!("ws://127.0.0.1:{}/ws?room={}", workflow.port, room_id);
     let public_url = workflow.public_url;
     let public_room_url = public_url

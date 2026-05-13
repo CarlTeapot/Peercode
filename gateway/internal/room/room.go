@@ -1,11 +1,17 @@
 package room
 
 import (
+	"errors"
 	"log/slog"
 	"sync"
 
 	"gateway/internal/client"
 	"gateway/internal/wire"
+)
+
+var (
+	ErrRoomClosed        = errors.New("room closed")
+	ErrDuplicateClientID = errors.New("duplicate client_id")
 )
 
 const opsBufferSize = 256
@@ -38,16 +44,22 @@ func New(id string) *Room {
 	}
 }
 
-func (r *Room) Join(c *client.Client) bool {
+func (r *Room) Join(c *client.Client) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		slog.Warn("join rejected: room already closed", "room_id", r.ID, "client_id", c.ID)
-		return false
+		return ErrRoomClosed
+	}
+	for existing := range r.clients {
+		if existing.ID == c.ID {
+			slog.Warn("join rejected: duplicate client_id", "room_id", r.ID, "client_id", c.ID)
+			return ErrDuplicateClientID
+		}
 	}
 	r.clients[c] = struct{}{}
 	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "size", len(r.clients))
-	return true
+	return nil
 }
 
 func (r *Room) Leave(c *client.Client, onEmpty func()) {

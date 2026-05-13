@@ -14,6 +14,7 @@ pub struct Sidecar {
 }
 
 pub struct GatewayWorkflowResult {
+    pub gateway_auth_token: String,
     pub lan_url: Option<String>,
     pub port: u16,
     pub log_rx: Receiver<CommandEvent>,
@@ -28,6 +29,7 @@ pub struct CombinedWorkflowResult {
     pub port: u16,
     pub public_url: Option<String>,
     pub lan_url: Option<String>,
+    pub gateway_auth_token: String,
 }
 
 #[derive(serde::Serialize)]

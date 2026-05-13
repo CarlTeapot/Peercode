@@ -60,6 +60,10 @@ func TestHub_PostRoomsReturnsFreshID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("POST /rooms: %v", err)
 		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			t.Fatalf("POST /rooms: status=%d, want 200", resp.StatusCode)
+		}
 		var body map[string]string
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -67,7 +71,7 @@ func TestHub_PostRoomsReturnsFreshID(t *testing.T) {
 		resp.Body.Close()
 		id := body["room_id"]
 		if !regexp.MustCompile(`^[0-9a-f]{8}$`).MatchString(id) {
-			t.Fatalf("room_id=%q, want 8 hex chars", id)
+			t.Fatalf("room_id=%q, want 8 lowercase hex chars", id)
 		}
 		ids = append(ids, id)
 	}
@@ -118,6 +122,27 @@ func TestHub_TwoClientsSameRoomShareSet(t *testing.T) {
 	}
 	if rooms := h.Rooms(); len(rooms) != 1 || rooms[0] != "shared" {
 		t.Fatalf("Rooms=%v, want [shared]", rooms)
+	}
+}
+
+func TestHub_DuplicateClientIDRejected(t *testing.T) {
+	srv, _ := newTestServer(t)
+	first := dial(t, wsURL(srv.URL, "dup-room", "same-id"))
+	defer first.Close(websocket.StatusNormalClosure, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	second, _, err := websocket.Dial(ctx, wsURL(srv.URL, "dup-room", "same-id"), nil)
+	if err != nil {
+		t.Fatalf("second dial: %v", err)
+	}
+	defer second.Close(websocket.StatusNormalClosure, "")
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), time.Second)
+	defer readCancel()
+	_, _, err = second.Read(readCtx)
+	if err == nil {
+		t.Fatal("expected read on duplicate client_id connection to fail after server closes it")
 	}
 }
 

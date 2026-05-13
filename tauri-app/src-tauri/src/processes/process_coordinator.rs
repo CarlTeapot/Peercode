@@ -71,5 +71,6 @@ pub async fn launch(app: AppHandle) -> Result<CombinedWorkflowResult, String> {
         port,
         lan_url,
         public_url,
+        gateway_auth_token: gateway.gateway_auth_token,
     })
 }

@@ -35,3 +35,12 @@ pub struct JoinInfo {
     pub server_url: String,
     pub room_id: String,
 }
+
+pub struct HostSessionSetup {
+    pub room_id: String,
+    pub port: u16,
+    pub lan_url: Option<String>,
+    pub public_url: Option<String>,
+    pub local_room_url: String,
+    pub public_room_url: Option<String>,
+}

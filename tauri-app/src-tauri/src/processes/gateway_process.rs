@@ -1,4 +1,5 @@
 use crate::app_config::config::AppConfig;
+use crate::gateway::auth_token_generator::generate_gateway_token;
 use crate::processes::types::{GatewayWorkflowResult, Sidecar, SidecarStatus};
 use crate::state::appstate::{AppRole, AppState};
 use log::{debug, info, warn};
@@ -10,11 +11,15 @@ pub async fn run_gateway(app: &AppHandle) -> Result<Option<GatewayWorkflowResult
     info!("gateway startup requested");
     let gateway_log_level = app.state::<AppConfig>().logging.gateway_level_for_env();
     debug!("gateway startup using log level: {}", gateway_log_level);
+
+    let gateway_token = generate_gateway_token();
+
     let (mut rx, child) = app
         .shell()
         .sidecar("peercode-gateway")
         .map_err(|e| format!("Gateway sidecar not found: {e}"))?
         .env("GATEWAY_LOG_LEVEL", gateway_log_level)
+        .env("GATEWAY_AUTH_TOKEN", gateway_token.clone())
         .spawn()
         .map_err(|e| format!("Failed to spawn gateway: {e}"))?;
 
@@ -28,11 +33,15 @@ pub async fn run_gateway(app: &AppHandle) -> Result<Option<GatewayWorkflowResult
             return Ok(None);
         }
         drop(role);
-        state.processes.lock().unwrap().gateway = Some(Sidecar {
-            proc: child,
-            name: "peercode-gateway".to_string(),
-            status: SidecarStatus::Enabled,
-        });
+        {
+            let mut procs = state.processes.lock().unwrap();
+            procs.gateway = Some(Sidecar {
+                proc: child,
+                name: "peercode-gateway".to_string(),
+                status: SidecarStatus::Enabled,
+            });
+            procs.gateway_auth_token = Some(gateway_token.clone());
+        }
         debug!("gateway process handle stored in app state");
     }
 
@@ -46,6 +55,7 @@ pub async fn run_gateway(app: &AppHandle) -> Result<Option<GatewayWorkflowResult
 
                     return Ok(Some(GatewayWorkflowResult {
                         lan_url: get_lan_url(port).await,
+                        gateway_auth_token: gateway_token,
                         port,
                         log_rx: rx,
                     }));

@@ -4381,6 +4381,7 @@ version = "0.1.0"
 dependencies = [
  "crdt-core",
  "futures-util",
+ "hex",
  "local-ip-address",
  "log",
  "rand 0.8.6",
