@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
-use crate::crdt::remote_op_handler::process_loop;
+use crate::state::document::wire_dispatch::process_loop;
 use crate::ws_management::ws_receiver::receive_loop;
 use crate::ws_management::ws_types::{WsConnection, WsError};
 use crate::ws_management::ws_writer::write_loop;

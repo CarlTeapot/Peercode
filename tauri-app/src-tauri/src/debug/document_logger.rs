@@ -1,5 +1,6 @@
 use crate::state::appstate::AppState;
-use log::info;
+use crate::state::document::{request, DocOp};
+use log::{info, warn};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tauri::Manager;
@@ -11,12 +12,12 @@ pub fn spawn_linked_list_logger(app_handle: tauri::AppHandle) {
         loop {
             interval.tick().await;
             let state = app_handle.state::<AppState>();
-            if state.crdt_logging_enabled.load(Ordering::Relaxed) {
-                let text = {
-                    let document = state.document.lock().unwrap();
-                    document.debug_linked_list()
-                };
-                info!("CRDT linked list: {}", text);
+            if !state.crdt_logging_enabled.load(Ordering::Relaxed) {
+                continue;
+            }
+            match request(&state.doc_tx, |reply| DocOp::DebugLinkedList { reply }).await {
+                Ok(text) => info!("CRDT linked list: {}", text),
+                Err(e) => warn!("CRDT linked list dump failed: {e}"),
             }
         }
     });

@@ -9,8 +9,8 @@ import type { Monaco } from "@monaco-editor/react";
 import { listen } from "@tauri-apps/api/event";
 
 type RemoteChangeEvent =
-  | { type: "insert"; position: number; content: string }
-  | { type: "delete"; position: number; length: number };
+  | { type: "insert"; seq: number; position: number; content: string }
+  | { type: "delete"; seq: number; position: number; length: number };
 
 interface LogEntry {
   id: number;
@@ -25,6 +25,7 @@ interface UseRemoteChangeListenerArgs {
   isApplyingRemote: MutableRefObject<boolean>;
   eventCountRef: MutableRefObject<number>;
   setEventLog: Dispatch<SetStateAction<LogEntry[]>>;
+  lastAppliedSeqRef: MutableRefObject<number>;
 }
 
 export function useRemoteChangeListener({
@@ -33,10 +34,18 @@ export function useRemoteChangeListener({
   isApplyingRemote,
   eventCountRef,
   setEventLog,
+  lastAppliedSeqRef,
 }: UseRemoteChangeListenerArgs) {
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    const unlistens: Array<() => void> = [];
     let cancelled = false;
+
+    listen<void>("crdt://document-reset", () => {
+      lastAppliedSeqRef.current = 0;
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistens.push(fn);
+    });
 
     listen<RemoteChangeEvent>("crdt://remote-change", (e) => {
       const ed = editorRef.current;
@@ -102,22 +111,28 @@ export function useRemoteChangeListener({
           ]);
         }
       } finally {
+        if (change.seq > lastAppliedSeqRef.current) {
+          lastAppliedSeqRef.current = change.seq;
+        }
         isApplyingRemote.current = false;
       }
     }).then((fn) => {
-      if (cancelled) {
-        fn();
-      } else {
-        unlisten = fn;
-      }
+      if (cancelled) fn();
+      else unlistens.push(fn);
     });
 
     return () => {
       cancelled = true;
-      if (unlisten) {
-        unlisten();
-        unlisten = null;
+      while (unlistens.length) {
+        unlistens.pop()!();
       }
     };
-  }, [editorRef, monacoRef, isApplyingRemote, eventCountRef, setEventLog]);
+  }, [
+    editorRef,
+    monacoRef,
+    isApplyingRemote,
+    eventCountRef,
+    setEventLog,
+    lastAppliedSeqRef,
+  ]);
 }

@@ -1,12 +1,12 @@
 use crate::processes::types::Sidecar;
+use crate::state::document::DocSender;
 use crate::state::ws_state::WsState;
-use crdt_core::types::ClientId;
-use crdt_core::Document;
 use log::{info, warn};
 use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::Mutex;
+
 pub struct AppState {
-    pub document: Mutex<Document>,
+    pub doc_tx: DocSender,
     pub role: Mutex<AppRole>,
     pub processes: Mutex<HostProcesses>,
     pub current_document_name: Mutex<Option<String>>,
@@ -53,9 +53,9 @@ pub struct HostProcesses {
 }
 
 impl AppState {
-    pub fn new(client_id: ClientId) -> Self {
+    pub fn new(doc_tx: DocSender) -> Self {
         Self {
-            document: Mutex::new(Document::new(client_id)),
+            doc_tx,
             role: Mutex::new(AppRole::Undecided),
             processes: Mutex::new(HostProcesses {
                 gateway: None,
@@ -66,11 +66,6 @@ impl AppState {
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
         }
-    }
-
-    pub fn replace_document(&self, doc: Document) {
-        let mut current = self.document.lock().unwrap();
-        *current = doc;
     }
 
     pub fn leave_session(&self, ws: &WsState) {

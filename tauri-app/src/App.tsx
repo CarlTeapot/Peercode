@@ -217,6 +217,14 @@ function AppContent({ username }: AppContentProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const isApplyingRemote = useRef(false);
+  const lastAppliedSeqRef = useRef(0);
+  const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
+
+  const enqueueOp = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const next = opChainRef.current.then(task, task);
+    opChainRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
 
   const handleDocumentLoaded = useCallback((text: string, name: string) => {
     const ed = editorRef.current;
@@ -241,13 +249,23 @@ function AppContent({ username }: AppContentProps) {
     }
   }, [eventLog]);
 
-  const sendInsert = async (position: number, content: string) => {
-    await invoke("insert", { position, content });
-  };
+  const sendInsert = (position: number, content: string) =>
+    enqueueOp(() =>
+      invoke("insert", {
+        position,
+        content,
+        baseSeq: lastAppliedSeqRef.current,
+      }),
+    );
 
-  const sendDelete = async (position: number, length: number) => {
-    await invoke("delete", { position, length });
-  };
+  const sendDelete = (position: number, length: number) =>
+    enqueueOp(() =>
+      invoke("delete", {
+        position,
+        length,
+        baseSeq: lastAppliedSeqRef.current,
+      }),
+    );
 
   // --- session links ---
   const [lanUrl, setLanUrl] = useState<string | null>(null);
@@ -429,6 +447,7 @@ function AppContent({ username }: AppContentProps) {
     isApplyingRemote,
     eventCountRef,
     setEventLog,
+    lastAppliedSeqRef,
   });
 
   useSnapshotListener({

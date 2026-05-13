@@ -1,5 +1,4 @@
 mod app_config;
-mod crdt;
 mod debug;
 mod gateway;
 mod persistence;
@@ -10,11 +9,11 @@ mod ws_management;
 
 use crate::app_config::config::AppConfig;
 use crate::app_config::identity;
-use crate::crdt::local_op_handler;
 #[cfg(debug_assertions)]
 use crate::debug::document_logger::spawn_linked_list_logger;
 use crate::gateway::gateway_api::destroy_room;
 use crate::state::appstate::{AppRole, AppState};
+use crate::state::document::{commands as doc_commands, spawn as spawn_doc_actor};
 use crate::state::ws_state::WsState;
 use crdt_core::types::ClientId;
 use log::{debug, info, warn};
@@ -51,7 +50,9 @@ pub fn run() {
         .setup(move |app| {
             let client_id = ClientId::new(random::<u64>());
             info!("Setting up tauri app state");
-            app.manage(AppState::new(client_id));
+
+            let doc_tx = spawn_doc_actor(client_id, app.handle().clone());
+            app.manage(AppState::new(doc_tx));
             app.manage(WsState::new(app_config.websocket.connect_timeout()));
             app.manage(app_config.clone());
             debug!(
@@ -98,8 +99,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            local_op_handler::insert,
-            local_op_handler::delete,
+            doc_commands::insert,
+            doc_commands::delete,
             session::host_commands::host_session,
             session::host_commands::end_session,
             session::host_commands::kill_host_processes,
@@ -120,7 +121,7 @@ pub fn run() {
             persistence::commands::save_text_file,
             persistence::commands::reset_document,
             #[cfg(debug_assertions)]
-            local_op_handler::toggle_crdt_logging
+            doc_commands::toggle_crdt_logging
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

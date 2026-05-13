@@ -1,5 +1,6 @@
 use crate::session::session_types::JoinInfo;
 use crate::state::appstate::{AppRole, AppState};
+use crate::state::document::{request, DocOp};
 use crate::state::ws_state::WsState;
 use log::{debug, info, warn};
 use tauri::{AppHandle, State};
@@ -29,10 +30,14 @@ pub async fn join_session(
         debug!("join_session role set to Starting");
     }
 
-    let guest_client_id = {
-        let doc = state.document.lock().unwrap();
-        doc.client_id.value
-    };
+    let guest_client_id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply })
+        .await
+        .map_err(|e| {
+            *state.role.lock().unwrap() = AppRole::Undecided;
+            warn!("join_session: failed to read client_id from doc actor: {e}");
+            e
+        })?
+        .value;
 
     let ws_url = format!(
         "{}/ws?room={}&client_id={}",

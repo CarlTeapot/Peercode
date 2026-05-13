@@ -25,19 +25,31 @@ pub enum WsConnection {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RemoteChangeEvent {
-    Insert { position: u64, content: String },
-    Delete { position: u64, length: u64 },
+    Insert {
+        seq: u64,
+        position: u64,
+        content: String,
+    },
+    Delete {
+        seq: u64,
+        position: u64,
+        length: u64,
+    },
 }
 
-impl From<RemoteChange> for RemoteChangeEvent {
-    fn from(c: RemoteChange) -> Self {
-        match c {
-            RemoteChange::Insert { position, content } => {
-                RemoteChangeEvent::Insert { position, content }
-            }
-            RemoteChange::Delete { position, length } => {
-                RemoteChangeEvent::Delete { position, length }
-            }
+impl RemoteChangeEvent {
+    pub fn from_change(seq: u64, change: RemoteChange) -> Self {
+        match change {
+            RemoteChange::Insert { position, content } => RemoteChangeEvent::Insert {
+                seq,
+                position,
+                content,
+            },
+            RemoteChange::Delete { position, length } => RemoteChangeEvent::Delete {
+                seq,
+                position,
+                length,
+            },
         }
     }
 }

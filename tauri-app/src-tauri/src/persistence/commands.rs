@@ -2,29 +2,26 @@ use std::fs;
 
 use crate::persistence;
 use crate::state::appstate::AppState;
+use crate::state::document::{request, DocOp};
 use crdt_core::types::ClientId;
 use crdt_core::Document;
 use rand::random;
 use tauri::{AppHandle, State};
 
 #[tauri::command]
-pub fn save_document(
+pub async fn save_document(
     app: AppHandle,
     name: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let snapshot = {
-        let doc = state.document.lock().unwrap();
-        doc.to_snapshot()
-    };
-
+    let snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
     persistence::save_snapshot_named(&app, &name, &snapshot).map_err(|e| e.to_string())?;
     *state.current_document_name.lock().unwrap() = Some(name);
     Ok(())
 }
 
 #[tauri::command]
-pub fn load_document(
+pub async fn load_document(
     app: AppHandle,
     name: String,
     state: State<'_, AppState>,
@@ -32,7 +29,11 @@ pub fn load_document(
     let loaded = persistence::load_named(&app, &name).map_err(|e| e.to_string())?;
     let text = loaded.get_text();
 
-    state.replace_document(loaded);
+    request(&state.doc_tx, |reply| DocOp::Replace {
+        doc: Box::new(loaded),
+        reply,
+    })
+    .await?;
     *state.current_document_name.lock().unwrap() = Some(name);
 
     Ok(text)
@@ -44,17 +45,13 @@ pub fn list_saved_documents(app: AppHandle) -> Result<Vec<persistence::DocumentM
 }
 
 #[tauri::command]
-pub fn fork_document(
+pub async fn fork_document(
     app: AppHandle,
     new_name: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let (original_snapshot, original_name) = {
-        let doc = state.document.lock().unwrap();
-        let snap = doc.to_snapshot();
-        let name = state.current_document_name.lock().unwrap().clone();
-        (snap, name)
-    };
+    let original_snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
+    let original_name = state.current_document_name.lock().unwrap().clone();
 
     if let Some(ref current_name) = original_name {
         persistence::save_snapshot_named(&app, current_name, &original_snapshot)
@@ -66,12 +63,16 @@ pub fn fork_document(
     fork_snapshot.pending_blocks.clear();
     fork_snapshot.pending_delete_sets.clear();
 
-    let forked = crdt_core::Document::from_snapshot(fork_snapshot);
+    let forked = Document::from_snapshot(fork_snapshot);
     let text = forked.get_text();
 
     persistence::save_named(&app, &new_name, &forked).map_err(|e| e.to_string())?;
 
-    state.replace_document(forked);
+    request(&state.doc_tx, |reply| DocOp::Replace {
+        doc: Box::new(forked),
+        reply,
+    })
+    .await?;
     *state.current_document_name.lock().unwrap() = Some(new_name);
 
     Ok(text)
@@ -88,9 +89,8 @@ pub fn delete_document(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_document_text(state: State<'_, AppState>) -> Result<String, String> {
-    let doc = state.document.lock().unwrap();
-    Ok(doc.get_text())
+pub async fn get_document_text(state: State<'_, AppState>) -> Result<String, String> {
+    request(&state.doc_tx, |reply| DocOp::GetText { reply }).await
 }
 
 #[tauri::command]
@@ -104,9 +104,14 @@ pub fn save_text_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
-    let client_id = state.document.lock().unwrap().client_id;
-    state.replace_document(Document::new(client_id));
+pub async fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
+    let client_id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
+    let fresh = Document::new(client_id);
+    request(&state.doc_tx, |reply| DocOp::Replace {
+        doc: Box::new(fresh),
+        reply,
+    })
+    .await?;
     *state.current_document_name.lock().unwrap() = None;
     Ok(())
 }

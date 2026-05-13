@@ -3,8 +3,11 @@ use crate::processes::process_coordinator;
 use crate::processes::types::SidecarStatus;
 use crate::session::session_types::{SessionReadyPayload, SESSION_READY};
 use crate::state::appstate::{AppRole, AppState};
+use crate::state::document::{request, DocOp};
 use crate::state::ws_state::WsState;
+use crdt_core::encode_snapshot;
 use log::{debug, error, info, warn};
+use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 struct HostSessionSetup {
@@ -169,10 +172,12 @@ async fn connect(app: AppHandle, port: u16, room_id: String) {
         "host local connect requested: room_id={} port={}",
         room_id, port
     );
-    let host_client_id = {
-        let state = app.state::<AppState>();
-        let doc = state.document.lock().unwrap();
-        doc.client_id.value
+    let host_client_id = match read_client_id(&app).await {
+        Ok(cid) => cid,
+        Err(e) => {
+            error!("host connect: failed to read client_id from doc actor: {e}");
+            return;
+        }
     };
 
     let local_ws_url =
@@ -192,16 +197,23 @@ async fn connect(app: AppHandle, port: u16, room_id: String) {
     }
 }
 
+async fn read_client_id(app: &AppHandle) -> Result<u64, String> {
+    let state = app.state::<AppState>();
+    let id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
+    Ok(id.value)
+}
+
 async fn send_initial_snapshot(app: &AppHandle) {
     let state = app.state::<AppState>();
     let ws = app.state::<WsState>();
-    let snapshot_frame = {
-        let doc = state.document.lock().unwrap();
-        crdt_core::encode_snapshot(&doc.to_snapshot())
+    let snap = match request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("initial snapshot: failed to read snapshot from doc actor: {e}");
+            return;
+        }
     };
-    ws.send_raw(snapshot_frame).await;
-    state
-        .ops_since_snapshot
-        .store(0, std::sync::atomic::Ordering::Relaxed);
+    ws.send_raw(encode_snapshot(&snap)).await;
+    state.ops_since_snapshot.store(0, Ordering::Relaxed);
     info!("host sent initial document snapshot to gateway");
 }
