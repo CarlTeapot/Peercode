@@ -55,10 +55,7 @@ func EncodeControlJSON(subType byte, payload any) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wire: marshal control payload: %w", err)
 	}
-	frame := make([]byte, 2+len(jsonBytes))
-	frame[0] = PrefixControl
-	frame[1] = subType
-	copy(frame[2:], jsonBytes)
+	frame := append([]byte{PrefixControl, subType}, jsonBytes...)
 	return frame, nil
 }
 
