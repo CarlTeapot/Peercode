@@ -20,63 +20,87 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: tauri-app/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Security Audit (npm)
+      - name: Security Audit
         run: npm audit --audit-level=high
 
       - name: Check formatting (Prettier)
-        run: npx prettier --check "src/**/*.{ts,tsx,css}" 
-        
-      - name: Run Linter (ESLint)
+        run: npx prettier --check "src/**/*.{ts,tsx,css}"
+
+      - name: Lint (ESLint)
         run: npm run lint
 
-      - name: Check TypeScript types
+      - name: TypeScript type check
         run: npx tsc --noEmit
 
   # -------------------------------------------
-  #                 rust checks
+  #           crdt-core checks
   # -------------------------------------------
-  rust:
-    name: Rust (Format, Lint, Test)
+  crdt-core:
+    name: CRDT Core (Format, Lint, Test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # dependencies needed by tauri
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crdt-core
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Format
+        run: cargo fmt --all -- --check
+        working-directory: ./crdt-core
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: ./crdt-core
+
+      - name: Test
+        run: cargo test
+        working-directory: ./crdt-core
+
+      - name: Security Audit
+        run: cargo audit
+        working-directory: ./crdt-core
+
+  # -------------------------------------------
+  #           tauri checks (needs GUI deps)
+  # -------------------------------------------
+  tauri:
+    name: Tauri (Format, Lint, Test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-app/src-tauri
 
       - name: Install cargo-audit
         uses: taiki-e/install-action@cargo-audit
 
-      - name: Format (CRDT Core)
-        run: cargo fmt --all -- --check
-        working-directory: ./crdt-core
-
-      - name: Clippy (CRDT Core)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-        working-directory: ./crdt-core
-
-      - name: Test (CRDT Core)
-        run: cargo test
-        working-directory: ./crdt-core
-
-      - name: Security Audit (CRDT Core)
-        run: cargo generate-lockfile && cargo audit
-        working-directory: ./crdt-core
-
-      - name: Create binary placeholders (Tauri sidecar stubs for CI)
+      - name: Create sidecar stubs
         run: |
           TARGET=$(rustc -vV | sed -n 's|host: ||p')
           mkdir -p tauri-app/src-tauri/binaries
@@ -85,20 +109,20 @@ jobs:
           chmod +x tauri-app/src-tauri/binaries/cloudflared-${TARGET}
           chmod +x tauri-app/src-tauri/binaries/peercode-gateway-${TARGET}
 
-      - name: Format (Tauri)
+      - name: Format
         run: cargo fmt --all -- --check
         working-directory: ./tauri-app/src-tauri
 
-      - name: Clippy (Tauri)
+      - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
         working-directory: ./tauri-app/src-tauri
 
-      - name: Test (Tauri)
+      - name: Test
         run: cargo test
         working-directory: ./tauri-app/src-tauri
 
-      - name: Security Audit (Tauri)
-        run: cargo generate-lockfile && cargo audit
+      - name: Security Audit
+        run: cargo audit
         working-directory: ./tauri-app/src-tauri
 
   # -------------------------------------------
@@ -112,21 +136,24 @@ jobs:
         working-directory: ./gateway
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.10'
+          check-latest: true
+          cache-dependency-path: gateway/go.sum
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - name: Check Formatting
-        run: go fmt ./...
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
 
-      - name: Run Go Vet (Linter)
+      - name: Vet
         run: go vet ./...
 
-      - name: Run Tests
+      - name: Test
         run: go test -v ./...
 
-      - name: Security Audit (govulncheck)
+      - name: Security Audit
         run: govulncheck ./...
