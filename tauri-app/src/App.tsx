@@ -3,6 +3,7 @@ import {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   type FormEvent,
 } from "react";
 import type { editor } from "monaco-editor";
@@ -11,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
+import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import {
   UsernameGate,
   overlayStyle,
@@ -220,11 +222,11 @@ function AppContent({ username }: AppContentProps) {
   const lastAppliedSeqRef = useRef(0);
   const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
 
-  const enqueueOp = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
-    const next = opChainRef.current.then(task, task);
-    opChainRef.current = next.catch(() => undefined);
-    return next;
-  }, []);
+  const enqueueOp = useMemo(() => createEnqueueOp(opChainRef), []);
+  const { sendInsert, sendDelete } = useMemo(
+    () => createIpcSenders(enqueueOp),
+    [enqueueOp],
+  );
 
   const handleDocumentLoaded = useCallback((text: string, name: string) => {
     const ed = editorRef.current;
@@ -248,24 +250,6 @@ function AppContent({ username }: AppContentProps) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [eventLog]);
-
-  const sendInsert = (position: number, content: string) =>
-    enqueueOp(() =>
-      invoke("insert", {
-        position,
-        content,
-        baseSeq: lastAppliedSeqRef.current,
-      }),
-    );
-
-  const sendDelete = (position: number, length: number) =>
-    enqueueOp(() =>
-      invoke("delete", {
-        position,
-        length,
-        baseSeq: lastAppliedSeqRef.current,
-      }),
-    );
 
   // --- session links ---
   const [lanUrl, setLanUrl] = useState<string | null>(null);
@@ -476,6 +460,7 @@ function AppContent({ username }: AppContentProps) {
         // Skip changes that we ourselves applied from a remote peer.
         if (isApplyingRemote.current) return;
 
+        const baseSeq = lastAppliedSeqRef.current;
         void (async () => {
           for (const change of event.changes) {
             const offset = change.rangeOffset;
@@ -506,10 +491,10 @@ function AppContent({ username }: AppContentProps) {
 
             try {
               if (deleteLen > 0) {
-                await sendDelete(offset, deleteLen);
+                await sendDelete(offset, deleteLen, baseSeq);
               }
               if (insertText.length > 0) {
-                await sendInsert(offset, insertText);
+                await sendInsert(offset, insertText, baseSeq);
               }
             } catch (error) {
               const count = ++eventCountRef.current;
