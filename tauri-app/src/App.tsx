@@ -231,7 +231,7 @@ function AppContent({ username }: AppContentProps) {
   const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const enqueueOp = useMemo(() => createEnqueueOp(opChainRef), []);
-  const { sendInsert, sendDelete } = useMemo(
+  const { sendInsert, sendDelete, sendReplace } = useMemo(
     () => createIpcSenders(enqueueOp),
     [enqueueOp],
   );
@@ -513,10 +513,11 @@ function AppContent({ username }: AppContentProps) {
             });
 
             try {
-              if (deleteLen > 0) {
+              if (deleteLen > 0 && insertText.length > 0) {
+                await sendReplace(offset, deleteLen, insertText, baseSeq);
+              } else if (deleteLen > 0) {
                 await sendDelete(offset, deleteLen, baseSeq);
-              }
-              if (insertText.length > 0) {
+              } else {
                 await sendInsert(offset, insertText, baseSeq);
               }
             } catch (error) {

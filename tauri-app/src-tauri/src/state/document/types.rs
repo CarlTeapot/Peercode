@@ -24,6 +24,13 @@ pub enum DocOp {
         base_seq: u64,
         reply: oneshot::Sender<Result<DeleteSet, String>>,
     },
+    LocalReplace {
+        position: u64,
+        delete_length: u64,
+        content: String,
+        base_seq: u64,
+        reply: oneshot::Sender<Result<(DeleteSet, Option<WireBlock>), String>>,
+    },
     ApplyRemoteOp {
         op: OpMessage,
     },
@@ -33,7 +40,7 @@ pub enum DocOp {
     GetSnapshot {
         reply: oneshot::Sender<Snapshot>,
     },
-    Replace {
+    DocumentReplace {
         doc: Box<Document>,
         reply: oneshot::Sender<()>,
     },

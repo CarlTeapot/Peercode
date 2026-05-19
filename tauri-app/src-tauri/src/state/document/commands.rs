@@ -82,6 +82,54 @@ pub async fn delete(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn replace(
+    state: State<'_, AppState>,
+    ws: State<'_, WsState>,
+    position: u64,
+    delete_length: u64,
+    content: String,
+    base_seq: u64,
+) -> Result<(), String> {
+    debug!(
+        "crdt replace request: position={}, delete_length={}, content_len={}, base_seq={}",
+        position,
+        delete_length,
+        content.chars().count(),
+        base_seq
+    );
+
+    let (delete_set, wire_block_opt) =
+        request_fallible(&state.doc_tx, |reply| DocOp::LocalReplace {
+            position,
+            delete_length,
+            content,
+            base_seq,
+            reply,
+        })
+        .await
+        .map_err(|err| {
+            error!(
+                "crdt replace failed: position={position}, delete_length={delete_length}, \
+                 error={err}"
+            );
+            format!("replace failed: {err}")
+        })?;
+
+    if !delete_set.is_empty() {
+        let frame = encode_op(&OpMessage::Delete(delete_set));
+        ws.send_raw(frame).await;
+        maybe_send_snapshot(&state, &ws).await;
+    }
+    if let Some(wire_block) = wire_block_opt {
+        let frame = encode_op(&OpMessage::Insert(wire_block));
+        ws.send_raw(frame).await;
+        maybe_send_snapshot(&state, &ws).await;
+    }
+
+    Ok(())
+}
+
 async fn maybe_send_snapshot(state: &State<'_, AppState>, ws: &State<'_, WsState>) {
     if !is_host(state) {
         return;

@@ -106,6 +106,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             doc_commands::insert,
             doc_commands::delete,
+            doc_commands::replace,
             session::host_commands::host_session,
             session::host_commands::end_session,
             session::host_commands::kill_host_processes,

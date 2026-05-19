@@ -37,6 +37,25 @@ pub fn handle_local_delete(
     delete_with_clamp(state, transformed, length)
 }
 
+pub fn handle_local_replace(
+    state: &mut DocState,
+    position: u64,
+    delete_length: u64,
+    content: &str,
+    base_seq: u64,
+) -> Result<(DeleteSet, Option<WireBlock>), String> {
+    let transformed = state.op_log.transform(position, base_seq);
+    if transformed != position {
+        debug!(
+            "doc actor: local_replace transformed {} -> {} (base_seq={})",
+            position, transformed, base_seq
+        );
+    }
+    let delete_set = delete_with_clamp(state, transformed, delete_length)?;
+    let wire = insert_with_clamp(state, transformed, content)?;
+    Ok((delete_set, wire))
+}
+
 fn insert_with_clamp(
     state: &mut DocState,
     position: u64,

@@ -61,6 +61,23 @@ impl DocActor {
                     local::handle_local_delete(&mut self.state, position, length, base_seq);
                 let _ = reply.send(result);
             }
+            DocOp::LocalReplace {
+                position,
+                delete_length,
+                content,
+                base_seq,
+                reply,
+            } => {
+                let result = local::handle_local_replace(
+                    &mut self.state,
+                    position,
+                    delete_length,
+                    &content,
+                    base_seq,
+                );
+                let _ = reply.send(result);
+            }
+
             DocOp::ApplyRemoteOp { op } => {
                 remote::handle_remote_op(&mut self.state, &self.app, op);
             }
@@ -70,7 +87,7 @@ impl DocActor {
             DocOp::GetSnapshot { reply } => {
                 let _ = reply.send(self.state.doc.to_snapshot());
             }
-            DocOp::Replace { doc, reply } => {
+            DocOp::DocumentReplace { doc, reply } => {
                 snapshot::handle_replace(&mut self.state, &self.app, *doc);
                 let _ = reply.send(());
             }

@@ -29,6 +29,12 @@ export interface IpcSenders {
     length: number,
     baseSeq: number,
   ) => Promise<unknown>;
+  sendReplace: (
+    position: number,
+    deleteLength: number,
+    content: string,
+    baseSeq: number,
+  ) => Promise<unknown>;
 }
 
 export function createIpcSenders(
@@ -40,5 +46,9 @@ export function createIpcSenders(
       enqueueOp(() => invokeFn("insert", { position, content, baseSeq })),
     sendDelete: (position, length, baseSeq) =>
       enqueueOp(() => invokeFn("delete", { position, length, baseSeq })),
+    sendReplace: (position, deleteLength, content, baseSeq) =>
+      enqueueOp(() =>
+        invokeFn("replace", { position, deleteLength, content, baseSeq }),
+      ),
   };
 }

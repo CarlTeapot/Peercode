@@ -29,7 +29,7 @@ pub async fn load_document(
     let loaded = persistence::load_named(&app, &name).map_err(|e| e.to_string())?;
     let text = loaded.get_text();
 
-    request(&state.doc_tx, |reply| DocOp::Replace {
+    request(&state.doc_tx, |reply| DocOp::DocumentReplace {
         doc: Box::new(loaded),
         reply,
     })
@@ -68,7 +68,7 @@ pub async fn fork_document(
 
     persistence::save_named(&app, &new_name, &forked).map_err(|e| e.to_string())?;
 
-    request(&state.doc_tx, |reply| DocOp::Replace {
+    request(&state.doc_tx, |reply| DocOp::DocumentReplace {
         doc: Box::new(forked),
         reply,
     })
@@ -107,7 +107,7 @@ pub fn save_text_file(path: String, content: String) -> Result<(), String> {
 pub async fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
     let client_id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
     let fresh = Document::new(client_id);
-    request(&state.doc_tx, |reply| DocOp::Replace {
+    request(&state.doc_tx, |reply| DocOp::DocumentReplace {
         doc: Box::new(fresh),
         reply,
     })
