@@ -5,6 +5,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { editor } from "monaco-editor";
+import type { Monaco } from "@monaco-editor/react";
 import { listen } from "@tauri-apps/api/event";
 import type { PendingOpStore } from "./opQueue";
 
@@ -17,6 +18,7 @@ interface LogEntry {
 
 interface UseSnapshotListenerArgs {
   editorRef: MutableRefObject<editor.IStandaloneCodeEditor | null>;
+  monacoRef: MutableRefObject<Monaco | null>;
   isApplyingRemote: MutableRefObject<boolean>;
   eventCountRef: MutableRefObject<number>;
   setEventLog: Dispatch<SetStateAction<LogEntry[]>>;
@@ -25,6 +27,7 @@ interface UseSnapshotListenerArgs {
 
 export function useSnapshotListener({
   editorRef,
+  monacoRef,
   isApplyingRemote,
   eventCountRef,
   setEventLog,
@@ -36,11 +39,23 @@ export function useSnapshotListener({
 
     listen<{ text: string }>("crdt://snapshot-applied", (e) => {
       const ed = editorRef.current;
+      const mn = monacoRef.current;
       if (!ed) return;
+
+      // Normalize to LF before setting — snapshot text from the CRDT should
+      // only ever contain \n, but guard against any stale \r\n that crept in.
+      const normalizedText = e.payload.text
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n");
 
       isApplyingRemote.current = true;
       try {
-        ed.setValue(e.payload.text);
+        ed.setValue(normalizedText);
+        // setValue re-detects EOL from the content; re-pin to LF so that
+        // subsequent local edits on Windows still produce \n offsets.
+        if (mn) {
+          ed.getModel()?.setEOL(mn.editor.EndOfLineSequence.LF);
+        }
       } finally {
         isApplyingRemote.current = false;
       }
@@ -71,5 +86,12 @@ export function useSnapshotListener({
         unlisten = null;
       }
     };
-  }, [editorRef, isApplyingRemote, eventCountRef, setEventLog, pendingStore]);
+  }, [
+    editorRef,
+    monacoRef,
+    isApplyingRemote,
+    eventCountRef,
+    setEventLog,
+    pendingStore,
+  ]);
 }

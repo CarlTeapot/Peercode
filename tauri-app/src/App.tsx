@@ -537,6 +537,7 @@ function AppContent({ username }: AppContentProps) {
 
   useSnapshotListener({
     editorRef,
+    monacoRef,
     isApplyingRemote,
     eventCountRef,
     setEventLog,
@@ -553,6 +554,14 @@ function AppContent({ username }: AppContentProps) {
   const handleEditorMount: OnMount = (editorInstance, monacoInstance) => {
     editorRef.current = editorInstance;
     monacoRef.current = monacoInstance;
+
+    // Force LF on all platforms. Without this, Windows/WebView2 defaults to
+    // CRLF which makes every newline 2 bytes in the model, shifting all offsets
+    // relative to Linux/macOS peers and causing divergence.
+    editorInstance
+      .getModel()
+      ?.setEOL(monacoInstance.editor.EndOfLineSequence.LF);
+
     installPlainTextPasteHandler(editorInstance);
     setStatus("editor ready");
     setStatusReady(true);
