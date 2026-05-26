@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"gateway/internal/client"
 	"gateway/internal/wire"
@@ -14,7 +15,10 @@ var (
 	ErrDuplicateClientID = errors.New("duplicate client_id")
 )
 
-const opsBufferSize = 256
+const (
+	opsBufferSize           = 256
+	snapshotResponseTimeout = 5 * time.Second
+)
 
 type BroadcastMsg struct {
 	Sender *client.Client
@@ -27,9 +31,9 @@ type Room struct {
 	mu      sync.Mutex
 	clients map[*client.Client]struct{}
 	closed  bool
+	host    *client.Client
 
-	latestSnapshot []byte
-	opsLog         [][]byte
+	snapshotRequests []chan []byte
 
 	ops  chan BroadcastMsg
 	done chan struct{}
@@ -58,6 +62,10 @@ func (r *Room) Join(c *client.Client) error {
 		}
 	}
 	r.clients[c] = struct{}{}
+	if r.host == nil {
+		r.host = c
+		slog.Info("host client registered", "room_id", r.ID, "client_id", c.ID)
+	}
 	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "size", len(r.clients))
 	return nil
 }
@@ -70,6 +78,9 @@ func (r *Room) Leave(c *client.Client, onEmpty func()) {
 		return
 	}
 	delete(r.clients, c)
+	if r.host == c {
+		r.host = nil
+	}
 	c.CloseSend()
 	empty := len(r.clients) == 0
 	if empty {
@@ -93,50 +104,40 @@ func (r *Room) Size() int {
 	return len(r.clients)
 }
 
-func (r *Room) StoreSnapshot(data []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.latestSnapshot = make([]byte, len(data))
-	copy(r.latestSnapshot, data)
-	r.opsLog = nil
-	slog.Info("snapshot stored", "room_id", r.ID, "bytes", len(data))
-}
-
-func (r *Room) AppendOp(data []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.latestSnapshot == nil {
-		return
-	}
-	cp := make([]byte, len(data))
-	copy(cp, data)
-	r.opsLog = append(r.opsLog, cp)
-}
-
 func (r *Room) ReplayTo(c *client.Client) bool {
 	r.mu.Lock()
-	snap := r.latestSnapshot
-	ops := make([][]byte, len(r.opsLog))
-	copy(ops, r.opsLog)
+	host := r.host
+	if host == nil || host == c {
+		r.mu.Unlock()
+		slog.Debug("replay skipped: no host available", "room_id", r.ID, "client_id", c.ID)
+		return false
+	}
+	waiter := make(chan []byte, 1)
+	r.snapshotRequests = append(r.snapshotRequests, waiter)
 	r.mu.Unlock()
 
-	if snap == nil {
-		slog.Debug("replay skipped: no snapshot available", "room_id", r.ID, "client_id", c.ID)
+	if !host.Send(wire.EncodeControlFrame(wire.ControlSnapshotRequest)) {
+		r.removeSnapshotRequest(waiter)
+		slog.Warn("replay: failed to request snapshot from host", "room_id", r.ID, "client_id", c.ID, "host_id", host.ID)
+		return false
+	}
+	slog.Info("replay: snapshot requested from host", "room_id", r.ID, "client_id", c.ID, "host_id", host.ID)
+
+	var snap []byte
+	select {
+	case snap = <-waiter:
+	case <-time.After(snapshotResponseTimeout):
+		r.removeSnapshotRequest(waiter)
+		slog.Warn("replay: timed out waiting for host snapshot", "room_id", r.ID, "client_id", c.ID, "host_id", host.ID)
 		return false
 	}
 
 	if !c.Send(snap) {
+		r.removeSnapshotRequest(waiter)
 		slog.Warn("replay: failed to send snapshot to joiner", "room_id", r.ID, "client_id", c.ID)
 		return false
 	}
-	slog.Info("replay: snapshot sent to joiner", "room_id", r.ID, "client_id", c.ID, "snapshot_bytes", len(snap), "buffered_ops", len(ops))
-
-	for i, op := range ops {
-		if !c.Send(op) {
-			slog.Warn("replay: failed to send buffered op to joiner", "room_id", r.ID, "client_id", c.ID, "op_index", i)
-			break
-		}
-	}
+	slog.Info("replay: snapshot sent to joiner", "room_id", r.ID, "client_id", c.ID, "snapshot_bytes", len(snap))
 	return true
 }
 
@@ -151,9 +152,10 @@ func (r *Room) Run() {
 			return
 		case msg := <-r.ops:
 			if wire.IsSnapshotFrame(msg.Data) {
-				r.StoreSnapshot(msg.Data)
+				if !r.deliverSnapshotResponse(msg.Sender, msg.Data) {
+					slog.Debug("snapshot frame dropped: no pending snapshot request", "room_id", r.ID, "client_id", msg.Sender.ID, "bytes", len(msg.Data))
+				}
 			} else {
-				r.AppendOp(msg.Data)
 				r.broadcast(msg)
 			}
 		}
@@ -171,6 +173,37 @@ func (r *Room) broadcast(msg BroadcastMsg) {
 		"bytes", len(msg.Data),
 	)
 	r.sendToPeers(targets, msg.Data, "disconnecting slow client")
+}
+
+func (r *Room) deliverSnapshotResponse(sender *client.Client, data []byte) bool {
+	r.mu.Lock()
+	if sender != r.host || len(r.snapshotRequests) == 0 {
+		r.mu.Unlock()
+		return false
+	}
+	waiter := r.snapshotRequests[0]
+	r.snapshotRequests = r.snapshotRequests[1:]
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	r.mu.Unlock()
+
+	waiter <- cp
+	return true
+}
+
+func (r *Room) removeSnapshotRequest(waiter chan []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.removeSnapshotRequestLocked(waiter)
+}
+
+func (r *Room) removeSnapshotRequestLocked(waiter chan []byte) {
+	for i, pending := range r.snapshotRequests {
+		if pending == waiter {
+			r.snapshotRequests = append(r.snapshotRequests[:i], r.snapshotRequests[i+1:]...)
+			return
+		}
+	}
 }
 
 func (r *Room) BroadcastAll(data []byte) {
@@ -205,7 +238,11 @@ func (r *Room) drain() {
 		select {
 		case msg := <-r.ops:
 			drained++
-			r.broadcast(msg)
+			if wire.IsSnapshotFrame(msg.Data) {
+				_ = r.deliverSnapshotResponse(msg.Sender, msg.Data)
+			} else {
+				r.broadcast(msg)
+			}
 		default:
 			slog.Debug("room drain finished", "room_id", r.ID, "drained_messages", drained)
 			return

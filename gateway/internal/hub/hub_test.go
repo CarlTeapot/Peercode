@@ -51,6 +51,35 @@ func dial(t *testing.T, url string) *websocket.Conn {
 	return c
 }
 
+func answerSnapshotRequest(t *testing.T, host *websocket.Conn) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, request, err := host.Read(ctx)
+	if err != nil {
+		t.Fatalf("host snapshot request read: %v", err)
+	}
+	if len(request) != 2 || request[0] != wire.PrefixControl || request[1] != wire.ControlSnapshotRequest {
+		t.Fatalf("snapshot request = %v, want control snapshot request", request)
+	}
+	if err := host.Write(context.Background(), websocket.MessageBinary, []byte{wire.PrefixSnapshot, 0xAA}); err != nil {
+		t.Fatalf("host snapshot response write: %v", err)
+	}
+}
+
+func readSnapshot(t *testing.T, peer *websocket.Conn) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, snap, err := peer.Read(ctx)
+	if err != nil {
+		t.Fatalf("peer snapshot read: %v", err)
+	}
+	if len(snap) == 0 || snap[0] != wire.PrefixSnapshot {
+		t.Fatalf("snapshot frame prefix = %v, want snapshot", snap)
+	}
+}
+
 func TestHub_PostRoomsReturnsFreshID(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -112,6 +141,8 @@ func TestHub_TwoClientsSameRoomShareSet(t *testing.T) {
 	defer a.Close(websocket.StatusNormalClosure, "")
 	b := dial(t, wsURL(srv.URL, "shared", "bob"))
 	defer b.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequest(t, a)
+	readSnapshot(t, b)
 
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -193,10 +224,13 @@ func TestHub_RoomsIsolated(t *testing.T) {
 func TestHub_ConcurrentJoinsSameRoom(t *testing.T) {
 	srv, h := newTestServer(t)
 	const n = 10
+	host := dial(t, wsURL(srv.URL, "race", "c0"))
+	defer host.Close(websocket.StatusNormalClosure, "")
+
 	var wg sync.WaitGroup
-	wg.Add(n)
-	conns := make(chan *websocket.Conn, n)
-	for i := 0; i < n; i++ {
+	wg.Add(n - 1)
+	conns := make(chan *websocket.Conn, n-1)
+	for i := 1; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
 			cid := fmt.Sprintf("c%d", i)
@@ -205,8 +239,16 @@ func TestHub_ConcurrentJoinsSameRoom(t *testing.T) {
 	}
 	wg.Wait()
 	close(conns)
+	joined := make([]*websocket.Conn, 0, n-1)
 	for c := range conns {
 		defer c.Close(websocket.StatusNormalClosure, "")
+		joined = append(joined, c)
+	}
+	for range joined {
+		answerSnapshotRequest(t, host)
+	}
+	for _, c := range joined {
+		readSnapshot(t, c)
 	}
 
 	deadline := time.Now().Add(time.Second)
@@ -228,6 +270,8 @@ func TestHub_FanOut_SenderExcluded(t *testing.T) {
 	defer a.Close(websocket.StatusNormalClosure, "")
 	b := dial(t, wsURL(srv.URL, "fanout", "gendi"))
 	defer b.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequest(t, a)
+	readSnapshot(t, b)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -262,8 +306,12 @@ func TestHub_FanOut_ThreeClients(t *testing.T) {
 	defer a.Close(websocket.StatusNormalClosure, "")
 	b := dial(t, wsURL(srv.URL, "trio", "gendi"))
 	defer b.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequest(t, a)
+	readSnapshot(t, b)
 	c := dial(t, wsURL(srv.URL, "trio", "gela"))
 	defer c.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequest(t, a)
+	readSnapshot(t, c)
 
 	time.Sleep(50 * time.Millisecond)
 

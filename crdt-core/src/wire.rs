@@ -10,6 +10,7 @@ pub const OP_PREFIX: u8 = 0x00;
 pub const SNAPSHOT_PREFIX: u8 = 0x01;
 pub const PREFIX_CONTROL: u8 = 0x02;
 pub const CONTROL_SESSION_ENDED: u8 = 0x01;
+pub const CONTROL_SNAPSHOT_REQUEST: u8 = 0x02;
 
 #[derive(Debug, Clone, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
 pub struct WireBlock {

@@ -12,7 +12,8 @@ const (
 )
 
 const (
-	ControlSessionEnded byte = 0x01
+	ControlSessionEnded    byte = 0x01
+	ControlSnapshotRequest byte = 0x02
 )
 
 func EncodeControlFrame(controlType byte) []byte {

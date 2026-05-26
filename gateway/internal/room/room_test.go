@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gateway/internal/client"
+	"gateway/internal/wire"
 )
 
 func init() {
@@ -119,9 +120,25 @@ func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
 		t.Fatalf("join host: %v", err)
 	}
 
-	snapFrame := []byte{0x01, 0xAA, 0xBB}
-	r.Ops() <- BroadcastMsg{Sender: host, Data: snapFrame}
-	time.Sleep(50 * time.Millisecond)
+	joiner := client.New("joiner", "room-snap", nil)
+	if err := r.Join(joiner); err != nil {
+		t.Fatalf("join joiner: %v", err)
+	}
+
+	replayDone := make(chan bool, 1)
+	go func() {
+		replayDone <- r.ReplayTo(joiner)
+	}()
+
+	var request []byte
+	select {
+	case request = <-host.SendChan():
+	case <-time.After(time.Second):
+		t.Fatal("host did not receive snapshot request")
+	}
+	if len(request) != 2 || request[0] != wire.PrefixControl || request[1] != wire.ControlSnapshotRequest {
+		t.Fatalf("snapshot request = %v, want control snapshot request", request)
+	}
 
 	op1 := []byte{0x00, 0x01}
 	op2 := []byte{0x00, 0x02}
@@ -129,12 +146,15 @@ func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
 	r.Ops() <- BroadcastMsg{Sender: host, Data: op2}
 	time.Sleep(50 * time.Millisecond)
 
-	joiner := client.New("joiner", "room-snap", nil)
-	if err := r.Join(joiner); err != nil {
-		t.Fatalf("join joiner: %v", err)
-	}
+	snapFrame := []byte{0x01, 0xAA, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: host, Data: snapFrame}
 
-	got := r.ReplayTo(joiner)
+	var got bool
+	select {
+	case got = <-replayDone:
+	case <-time.After(time.Second):
+		t.Fatal("ReplayTo did not return")
+	}
 	if !got {
 		t.Fatal("ReplayTo returned false; expected snapshot replay")
 	}
@@ -150,13 +170,13 @@ func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
 	}
 done:
 	if len(received) != 3 {
-		t.Fatalf("joiner received %d messages, want 3 (snapshot + 2 ops)", len(received))
+		t.Fatalf("joiner received %d messages, want 3 (2 ops + snapshot)", len(received))
 	}
-	if received[0][0] != 0x01 {
-		t.Fatalf("first message prefix = 0x%02X, want 0x01 (snapshot)", received[0][0])
-	}
-	if received[1][0] != 0x00 || received[2][0] != 0x00 {
+	if received[0][0] != 0x00 || received[1][0] != 0x00 {
 		t.Fatalf("op messages have wrong prefix")
+	}
+	if received[2][0] != 0x01 {
+		t.Fatalf("third message prefix = 0x%02X, want 0x01 (snapshot)", received[2][0])
 	}
 
 	r.Leave(host, nil)

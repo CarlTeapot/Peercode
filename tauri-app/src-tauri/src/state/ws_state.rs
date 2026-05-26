@@ -90,6 +90,7 @@ impl WsState {
             Arc::clone(&self.write_tx),
             op_tx,
             disconnect_tx,
+            app,
         ));
         debug!("ws sender/receiver/processor tasks spawned");
 

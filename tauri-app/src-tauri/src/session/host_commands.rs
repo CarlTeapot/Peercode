@@ -6,9 +6,7 @@ use crate::state::document::{request, DocOp};
 use crate::state::ws_state::WsState;
 use crate::ws_management::disconnect_handler::spawn_disconnect_handler;
 use crate::ws_management::ws_types::DisconnectReason;
-use crdt_core::encode_snapshot;
 use log::{debug, error, info, warn};
-use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::oneshot;
 
@@ -161,7 +159,6 @@ async fn connect(
         "local websocket connection established for host session: room_id={}",
         room_id
     );
-    send_initial_snapshot(app).await;
     Ok(disconnect_rx)
 }
 
@@ -169,19 +166,4 @@ async fn read_client_id(app: &AppHandle) -> Result<u64, String> {
     let state = app.state::<AppState>();
     let id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
     Ok(id.value)
-}
-
-async fn send_initial_snapshot(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let ws = app.state::<WsState>();
-    let snap = match request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("initial snapshot: failed to read snapshot from doc actor: {e}");
-            return;
-        }
-    };
-    ws.send_raw(encode_snapshot(&snap)).await;
-    state.ops_since_snapshot.store(0, Ordering::Relaxed);
-    info!("host sent initial document snapshot to gateway");
 }
