@@ -4,6 +4,8 @@ use crate::structs::Block;
 use crate::types::{BlockId, ClientId, Clock};
 use crate::wire::WireBlock;
 
+mod sync_invariant;
+
 fn block_id(client: u64, clock: u64) -> BlockId {
     BlockId::new(ClientId::new(client), Clock::new(clock))
 }
@@ -12,9 +14,11 @@ fn doc_with_single_block(content: &str) -> (Document, BlockId) {
     let client_id = ClientId::new(1);
     let id = BlockId::new(client_id, Clock::new(0));
     let mut doc = Document::new(client_id);
+    let block = Block::new(id, None, None, content.to_string());
+    let len = block.len;
     doc.head = Some(id);
-    doc.store
-        .insert(Block::new(id, None, None, content.to_string()));
+    doc.store.insert(block);
+    doc.position_index.insert_after(None, id, len);
     (doc, id)
 }
 
@@ -29,9 +33,15 @@ fn doc_with_two_blocks(left: &str, right: &str) -> (Document, BlockId, BlockId) 
     let mut right_block = Block::new(right_id, Some(left_id), None, right.to_string());
     right_block.set_left(Some(left_id));
 
+    let left_len = left_block.len;
+    let right_len = right_block.len;
+
     doc.head = Some(left_id);
     doc.store.insert(left_block);
     doc.store.insert(right_block);
+    doc.position_index.insert_after(None, left_id, left_len);
+    doc.position_index
+        .insert_after(Some(left_id), right_id, right_len);
 
     (doc, left_id, right_id)
 }
@@ -160,7 +170,7 @@ fn split_block_updates_existing_right_neighbor() {
 #[test]
 fn split_deleted_block_keeps_both_halves_deleted() {
     let (mut doc, id) = doc_with_single_block("hello");
-    doc.store.get_mut(&id).unwrap().is_deleted = true;
+    doc.mark_block_deleted(&id).unwrap();
 
     doc.split_block(id, 2).unwrap();
 
@@ -214,9 +224,15 @@ fn get_block_and_offset_by_position_uses_character_offsets_for_unicode() {
     let mut right = Block::new(right_id, Some(left_id), None, "b".to_string());
     right.set_left(Some(left_id));
 
+    let left_len = left.len;
+    let right_len = right.len;
+
     doc.head = Some(left_id);
     doc.store.insert(left);
     doc.store.insert(right);
+    doc.position_index.insert_after(None, left_id, left_len);
+    doc.position_index
+        .insert_after(Some(left_id), right_id, right_len);
 
     let (found, offset, _tail) = doc.get_block_and_offset_by_position(2);
 
@@ -281,9 +297,14 @@ fn split_block_right_half_inherits_origin_right_not_current_right() {
     c.set_left(Some(a_id));
     a.set_right(Some(c_id));
 
+    let a_len = a.len;
+    let c_len = c.len;
+
     doc.head = Some(a_id);
     doc.store.insert(a);
     doc.store.insert(c);
+    doc.position_index.insert_after(None, a_id, a_len);
+    doc.position_index.insert_after(Some(a_id), c_id, c_len);
 
     doc.split_block(a_id, 1).unwrap();
 
