@@ -36,6 +36,52 @@ impl Document {
     }
 
     #[cfg(debug_assertions)]
+    pub(super) fn assert_index_matches_linked_list(&self) {
+        let mut pos = 0u64;
+        let mut curr = self.head;
+
+        let max_steps = self.store.total_blocks().saturating_add(1);
+        let mut steps: usize = 0;
+
+        while let Some(id) = curr {
+            steps += 1;
+            debug_assert!(
+                steps <= max_steps,
+                "cycle detected in document linked list at block {id:?}"
+            );
+
+            let block = self
+                .store
+                .get(&id)
+                .expect("linked-list points to block missing from store");
+            let tree_pos = self.position_index.position_of(id);
+            assert_eq!(
+                tree_pos,
+                Some(pos),
+                "position_of({:?}) = {:?}, linked-list position = {}",
+                id,
+                tree_pos,
+                pos,
+            );
+            if !block.is_deleted {
+                pos += block.len;
+            }
+            curr = block.right();
+        }
+
+        let tree_total = self.position_index.visible_len();
+        assert_eq!(
+            tree_total, pos,
+            "position_index.visible_len() = {}, linked-list visible total = {}",
+            tree_total, pos,
+        );
+
+        self.position_index
+            .debug_validate()
+            .expect("position index invariants must hold");
+    }
+
+    #[cfg(debug_assertions)]
     pub fn debug_linked_list(&self) -> String {
         trace!("fetching document linked list visualization");
         let mut parts = Vec::new();
@@ -77,57 +123,23 @@ impl Document {
         }
     }
 
-    /// Visible-text character position of the block identified by `target`
+    /// Visible-text character position of the block identified by `target`.
+    /// Backed by the position index: O(log n) instead of an O(n) linked-list walk.
     pub(super) fn visible_position_of(&self, target: BlockId) -> u64 {
-        let mut pos = 0u64;
-        let mut curr = self.head;
-        while let Some(id) = curr {
-            if id == target {
-                return pos;
-            }
-            let Some(block) = self.store.get(&id) else {
-                break;
-            };
-            if !block.is_deleted {
-                pos += block.len;
-            }
-            curr = block.right();
-        }
-        pos
+        self.position_index
+            .position_of(target)
+            .unwrap_or_else(|| self.position_index.visible_len())
     }
 
     /// Locate the block and intra-block offset that corresponds to a visible
     /// character position. Returns `(block_id, offset_within_block, tail_id)`.
+    /// Backed by the position index: O(log n) instead of O(n).
     pub(super) fn get_block_and_offset_by_position(
         &self,
-        mut position: u64,
+        position: u64,
     ) -> (Option<BlockId>, u64, Option<BlockId>) {
         debug!("get_block_and_offset_by_position({:?})", position);
-
-        let mut current_block = self.head.and_then(|id| self.store.get(&id));
-        let mut tail_id = None;
-
-        while let Some(block) = current_block {
-            tail_id = Some(block.id);
-
-            if block.is_deleted {
-                current_block = block.right().and_then(|id| self.store.get(&id));
-                continue;
-            }
-            let content_len = block.len;
-
-            if position < content_len {
-                debug!("position: {}, content_len: {}", position, content_len);
-                return (Some(block.id), position, None);
-            }
-            position -= content_len;
-            current_block = block.right().and_then(|id| self.store.get(&id));
-        }
-
-        debug!(
-            "get_block_and_offset_by_position({:?}) returned a tail block",
-            position
-        );
-        (None, position, tail_id)
+        let r = self.position_index.find_at_position(position);
+        (r.id, r.offset, r.tail_id)
     }
 }
