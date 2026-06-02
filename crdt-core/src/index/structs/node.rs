@@ -7,7 +7,6 @@ pub(in crate::index) struct ChildSlot {
     pub visible_len: u64,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::index) enum ChildType {
     Leaf,
