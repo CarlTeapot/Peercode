@@ -1,7 +1,7 @@
 use crate::index::constants::{LEAF_CHILDREN, NODE_CHILDREN};
 use crate::index::structs::handles::{LeafIdx, NodeIdx};
 use crate::index::structs::leaf::{Leaf, LeafEntry};
-use crate::index::structs::node::{ChildSlot, Node};
+use crate::index::structs::node::{ChildSlot, ChildType, Node};
 use crate::index::structs::storage::Storage;
 
 impl Storage {
@@ -37,16 +37,16 @@ impl Storage {
         after_child_idx_u32: u32,
         new_slot: ChildSlot,
     ) -> (NodeIdx, u64, u64) {
-        let is_leaf_parent = self.nodes[node_idx.0 as usize].is_leaf_parent;
+        let child_type = self.nodes[node_idx.0 as usize].child_type;
 
         let mut all = self.build_node_overflow_buffer(node_idx, after_child_idx_u32, new_slot);
         let mid = all.len() / 2;
         let right_slots: Vec<ChildSlot> = all.split_off(mid);
         let left_slots: Vec<ChildSlot> = all;
 
-        let right_idx = self.push_new_node(&right_slots, is_leaf_parent);
+        let right_idx = self.push_new_node(&right_slots, child_type);
         self.overwrite_node_slots(node_idx, &left_slots);
-        self.reparent_children_under(right_idx, &right_slots, is_leaf_parent);
+        self.reparent_children_under(right_idx, &right_slots, child_type);
 
         let left_visible = sum_slot_visible(&left_slots);
         let right_visible = sum_slot_visible(&right_slots);
@@ -161,8 +161,8 @@ impl Storage {
     }
 
     /// Build a fresh internal node out of `slots` and push it onto the pool.
-    fn push_new_node(&mut self, slots: &[ChildSlot], is_leaf_parent: bool) -> NodeIdx {
-        let mut node = Node::new(is_leaf_parent);
+    fn push_new_node(&mut self, slots: &[ChildSlot], child_type: ChildType) -> NodeIdx {
+        let mut node = Node::new(child_type);
         for (i, s) in slots.iter().enumerate() {
             node.child_slots[i] = Some(*s);
         }
@@ -173,7 +173,7 @@ impl Storage {
     }
 
     /// Overwrite `node_idx`'s child slots in place with `slots`. The node's
-    /// `is_leaf_parent` flag is preserved.
+    /// `child_type` is preserved.
     fn overwrite_node_slots(&mut self, node_idx: NodeIdx, slots: &[ChildSlot]) {
         let node = &mut self.nodes[node_idx.0 as usize];
         node.child_slots = [None; NODE_CHILDREN];
@@ -184,14 +184,14 @@ impl Storage {
     }
 
     /// Set `parent` on each child referenced by `slots`. Whether the children
-    /// are leaves or nodes is dictated by the parent's `is_leaf_parent`.
+    /// are leaves or nodes is dictated by the parent's `child_type`.
     fn reparent_children_under(
         &mut self,
         parent: NodeIdx,
         slots: &[ChildSlot],
-        is_leaf_parent: bool,
+        child_type: ChildType,
     ) {
-        if is_leaf_parent {
+        if child_type == ChildType::Leaf {
             for s in slots {
                 self.leaves[s.idx as usize].parent = Some(parent);
             }

@@ -26,6 +26,10 @@ impl Storage {
     ) {
         let leaf = &mut self.leaves[leaf_idx.0 as usize];
         debug_assert!((leaf.num_entries as usize) < LEAF_CHILDREN);
+        debug_assert!(
+            after_slot.is_none_or(|s| (s as usize) < leaf.num_entries as usize),
+            "after_slot must point at an existing entry"
+        );
         let insert_pos = match after_slot {
             None => 0,
             Some(s) => s as usize + 1,
@@ -36,7 +40,7 @@ impl Storage {
         leaf.entries[insert_pos] = Some(entry);
         leaf.num_entries += 1;
 
-        for slot in 0..leaf.num_entries as usize {
+        for slot in insert_pos..leaf.num_entries as usize {
             if let Some(e) = &leaf.entries[slot] {
                 self.id_to_leaf.insert(e.id, (leaf_idx, slot as u8));
             }

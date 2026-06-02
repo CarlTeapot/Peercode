@@ -7,22 +7,33 @@ pub(in crate::index) struct ChildSlot {
     pub visible_len: u64,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::index) enum ChildType {
+    Leaf,
+    Node,
+}
+
 #[derive(Debug)]
 pub(in crate::index) struct Node {
     pub child_slots: [Option<ChildSlot>; NODE_CHILDREN],
     pub num_children: u8,
     pub parent: Option<NodeIdx>,
-    pub is_leaf_parent: bool,
+    pub child_type: ChildType,
 }
 
 impl Node {
-    pub fn new(is_leaf_parent: bool) -> Self {
+    pub fn new(child_type: ChildType) -> Self {
         Node {
             child_slots: [None; NODE_CHILDREN],
             num_children: 0,
             parent: None,
-            is_leaf_parent,
+            child_type,
         }
+    }
+
+    pub fn is_leaf_parent(&self) -> bool {
+        matches!(self.child_type, ChildType::Leaf)
     }
 
     pub fn visible_len(&self) -> u64 {

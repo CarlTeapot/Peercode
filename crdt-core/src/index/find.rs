@@ -84,7 +84,7 @@ impl PositionIndex {
                 u32::MAX,
                 "pos < total but no child matched (augmentation drift?)"
             );
-            if node.is_leaf_parent {
+            if node.is_leaf_parent() {
                 return LeafIdx(chosen);
             }
             current = NodeIdx(chosen);
@@ -128,7 +128,7 @@ impl PositionIndex {
             let node = &self.storage.nodes[current.0 as usize];
             let last = (node.num_children - 1) as usize;
             let last_idx = node.child_slots[last].expect("populated").idx;
-            if node.is_leaf_parent {
+            if node.is_leaf_parent() {
                 return Some(LeafIdx(last_idx));
             }
             current = NodeIdx(last_idx);

@@ -16,6 +16,10 @@ enum InsertTarget {
 
 impl PositionIndex {
     pub fn insert_after(&mut self, prev: Option<BlockId>, id: BlockId, len: u64) {
+        debug_assert!(
+            !self.storage.id_to_leaf.contains_key(&id),
+            "insert_after called with id {id:?} already present in index"
+        );
         let entry = LeafEntry {
             id,
             len,
@@ -43,6 +47,10 @@ impl PositionIndex {
     }
 
     pub fn split_entry(&mut self, id: BlockId, offset: u64, new_id: BlockId) {
+        debug_assert!(
+            !self.storage.id_to_leaf.contains_key(&new_id),
+            "split_entry called with new_id {new_id:?} already present in index"
+        );
         let (leaf_idx, slot) = self.storage.locate(id);
         let new_entry = self.shrink_left_half_for_split(leaf_idx, slot, offset, new_id);
 
