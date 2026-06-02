@@ -85,6 +85,15 @@ The CRDT `Document` is **not** behind a mutex — it lives inside a single Tokio
 
 The actor emits events to the webview when state changes: `crdt://remote-change`, `crdt://snapshot-applied`, `crdt://document-reset` (constants in `types.rs`). The frontend's `remoteChangeListener.ts` / `snapshotListener.ts` apply these to Monaco without re-broadcasting (the `isApplyingRemote` ref gates the `onDidChangeModelContent` handler in `App.tsx`).
 
+### Position index (`crdt-core/src/index/`)
+
+The CRDT linked list of blocks (traversed via `block.right()`) is the **source of truth for order**, but walking it to convert between a `BlockId` and its visible-text character position is O(n). `Document` therefore carries a `PositionIndex` — an augmented B+ tree that aggregates each subtree's `visible_len`, giving O(log n) `position_of(id)` and `find_at_position(pos)`. It is a *secondary, derived* structure: it must be mutated in lockstep with the linked list, never independently.
+
+- Every `Document` mutation that changes block order, length, or visibility mirrors itself into the index (`insert_after`, `split_entry`, `set_deleted`, `rebuild_from_order`) — see the call sites in `document/integrate.rs` and `Document::restore` in `document.rs`.
+- **Debug oracle:** in debug builds `assert_index_matches_linked_list` (`document/debug.rs`) walks the list after each mutation and panics if the tree disagrees; `index/validate.rs` separately checks the tree's internal invariants. These are `#[cfg(debug_assertions)]` only.
+- Module shape (SOLID split): `index/structs/` holds data + constructors only (`Storage`, `Leaf`, `Node`, `PositionIndex`, …); the sibling files hold operations (`mutate`, `find`, `split`, `propagate`, `descend`, `build`, `storage_ops`). Branching factors live in `index/constants.rs` and **differ between debug (tiny, to force splits in tests) and release (wide)** — a behavioral knob, not a constant.
+- Full walkthrough with diagrams: `docs/b-tree-optimisation.md`.
+
 ### Wire protocol — two parallel surfaces
 
 There is a binary wire framing **and** a JSON protocol envelope. They are not the same layer:
@@ -116,3 +125,4 @@ When the host window is destroyed (see `on_window_event` in `lib.rs`), `destroy_
 - **Edition 2024 / Rust stable** for `crdt-core`; **edition 2021** for `tauri-app/src-tauri`. Go module pins **`go 1.25.10`**.
 - The `peercode.config.toml` next to `Cargo.toml` is embedded into the binary via `include_str!` at compile time — config changes require a rebuild, not just a restart.
 - When you change `WireBlock`, `OpMessage`, `DeleteSet`, or `Snapshot` encoding in `crdt-core`, also update the matching constants/tests in `gateway/internal/wire/` and re-run the `protocol_drift` tests on both sides.
+- When you add a `Document` mutation that changes block order, length, or visibility, mirror it into `position_index` in the same step and let the debug oracle (`assert_index_matches_linked_list`) catch any drift — never let the index and linked list diverge.
