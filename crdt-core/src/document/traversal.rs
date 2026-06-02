@@ -1,6 +1,6 @@
 use super::Document;
 use crate::types::BlockId;
-use log::{debug, trace};
+use log::trace;
 
 impl Document {
     pub fn get_text(&self) -> String {
@@ -35,108 +35,12 @@ impl Document {
         text
     }
 
-    #[cfg(debug_assertions)]
-    pub(super) fn assert_index_matches_linked_list(&self) {
-        let mut pos = 0u64;
-        let mut curr = self.head;
-
-        let max_steps = self.store.total_blocks().saturating_add(1);
-        let mut steps: usize = 0;
-
-        while let Some(id) = curr {
-            steps += 1;
-            debug_assert!(
-                steps <= max_steps,
-                "cycle detected in document linked list at block {id:?}"
-            );
-
-            let block = self
-                .store
-                .get(&id)
-                .expect("linked-list points to block missing from store");
-            let tree_pos = self.position_index.position_of(id);
-            assert_eq!(
-                tree_pos,
-                Some(pos),
-                "position_of({:?}) = {:?}, linked-list position = {}",
-                id,
-                tree_pos,
-                pos,
-            );
-            if !block.is_deleted {
-                pos += block.len;
-            }
-            curr = block.right();
-        }
-
-        let tree_total = self.position_index.visible_len();
-        assert_eq!(
-            tree_total, pos,
-            "position_index.visible_len() = {}, linked-list visible total = {}",
-            tree_total, pos,
-        );
-
-        self.position_index
-            .debug_validate()
-            .expect("position index invariants must hold");
-    }
-
-    #[cfg(debug_assertions)]
-    pub fn debug_linked_list(&self) -> String {
-        trace!("fetching document linked list visualization");
-        let mut parts = Vec::new();
-        let mut curr = self.head;
-        let max_steps = self.store.total_blocks().saturating_add(1);
-        let mut steps: usize = 0;
-
-        while let Some(id) = curr {
-            steps += 1;
-            debug_assert!(
-                steps <= max_steps,
-                "cycle detected in document linked list at block {id:?}"
-            );
-
-            if let Some(block) = self.store.get(&id) {
-                let content = if block.content().is_empty() {
-                    "<empty>".to_string()
-                } else {
-                    block.content().replace('\n', "\\n")
-                };
-
-                if block.is_deleted {
-                    parts.push(format!("[DEL:{content}]"));
-                } else {
-                    parts.push(content);
-                }
-
-                curr = block.right();
-            } else {
-                parts.push("<broken-link>".to_string());
-                break;
-            }
-        }
-
-        if parts.is_empty() {
-            "<empty>".to_string()
-        } else {
-            parts.join(" --- ")
-        }
-    }
-
     /// Visible-text character position of the block identified by `target`.
     /// Backed by the position index: O(log n) instead of an O(n) linked-list walk.
     pub(super) fn visible_position_of(&self, target: BlockId) -> u64 {
-        let t0 = std::time::Instant::now();
-        let result = self
-            .position_index
+        self.position_index
             .position_of(target)
-            .unwrap_or_else(|| self.position_index.visible_len());
-        debug!(
-            "visible_position_of: {}µs  doc_blocks={}",
-            t0.elapsed().as_micros(),
-            self.store.total_blocks(),
-        );
-        result
+            .unwrap_or_else(|| self.position_index.visible_len())
     }
 
     /// Locate the block and intra-block offset that corresponds to a visible
@@ -146,13 +50,7 @@ impl Document {
         &self,
         position: u64,
     ) -> (Option<BlockId>, u64, Option<BlockId>) {
-        let t0 = std::time::Instant::now();
         let r = self.position_index.find_at_position(position);
-        debug!(
-            "get_block_and_offset_by_position: {}µs  doc_blocks={}",
-            t0.elapsed().as_micros(),
-            self.store.total_blocks(),
-        );
         (r.id, r.offset, r.tail_id)
     }
 }

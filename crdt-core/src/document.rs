@@ -3,6 +3,8 @@ use crate::store::{DeleteSet, StateVector, StructStore};
 use crate::structs::Block;
 use crate::types::{BlockId, ClientId};
 
+#[cfg(debug_assertions)]
+mod debug;
 mod integrate;
 mod ops;
 mod pending;
@@ -23,7 +25,7 @@ pub struct Document {
     pub delete_set: DeleteSet,
     pub seen_delete_set: DeleteSet,
     pub head: Option<BlockId>,
-    pub position_index: PositionIndex,
+    pub(crate) position_index: PositionIndex,
     pending_blocks: Vec<Block>,
     pending_delete_sets: Vec<DeleteSet>,
 }
