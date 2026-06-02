@@ -115,6 +115,7 @@ impl Document {
     /// Insert `block` into the store and link it.
     pub(super) fn integrate(&mut self, block: Block) -> Result<BlockId, DocumentError> {
         let block_id = block.id;
+        let block_len = block.len;
         debug!(
             "integrate start: id={:?}, origin_left={:?}, origin_right={:?}, len={}",
             block_id, block.origin_left, block.origin_right, block.len
@@ -131,12 +132,40 @@ impl Document {
         };
         self.store.insert(block);
         self.link_block(block_id, final_left, final_right)?;
+        let tree_left = match final_left {
+            Some(l_id) => self.store.get(&l_id).map(|b| b.id),
+            None => None,
+        };
+        self.position_index
+            .insert_after(tree_left, block_id, block_len);
         debug!(
             "integrate outcome: block {:?} inserted with neighbors left={:?}, right={:?}",
             block_id, final_left, final_right
         );
 
+        #[cfg(debug_assertions)]
+        self.assert_index_matches_linked_list();
+
         Ok(block_id)
+    }
+
+    pub(super) fn mark_block_deleted(
+        &mut self,
+        id: &BlockId,
+    ) -> Result<(u64, Option<BlockId>), DocumentError> {
+        let (len, right) = {
+            let block = self
+                .store
+                .mark_deleted(id)
+                .ok_or(DocumentError::BlockNotFound(*id))?;
+            (block.len, block.right())
+        };
+        self.position_index.set_deleted(*id);
+
+        #[cfg(debug_assertions)]
+        self.assert_index_matches_linked_list();
+
+        Ok((len, right))
     }
 
     /// Split `block_id` at `offset`. Returns the id of the newly created
@@ -193,10 +222,17 @@ impl Document {
                 .set_left(Some(new_block_id));
         }
 
+        self.position_index
+            .split_entry(block_id, offset, new_block_id);
+
         debug!(
             "split outcome: {:?} split at offset {} creating {:?}",
             block_id, offset, new_block_id
         );
+
+        #[cfg(debug_assertions)]
+        self.assert_index_matches_linked_list();
+
         Ok(Some(new_block_id))
     }
 

@@ -167,11 +167,7 @@ impl Document {
                     None
                 };
 
-                let actual_len = self
-                    .store
-                    .mark_deleted(&block_id)
-                    .ok_or(DocumentError::BlockNotFound(block_id))?
-                    .len;
+                let (actual_len, _) = self.mark_block_deleted(&block_id)?;
 
                 if let Some(position) = position_before {
                     changes.push(RemoteChange::Delete {
