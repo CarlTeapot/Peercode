@@ -71,6 +71,8 @@ pub async fn join_session(
                 "join_session role transitioned to Guest: room_id={}",
                 join_info.room_id
             );
+            // Report our state vector to the host so its GC floor can advance.
+            crate::state::sv_reporter::spawn(app.clone());
             spawn_disconnect_handler(app, disconnect_rx);
             Ok(())
         }

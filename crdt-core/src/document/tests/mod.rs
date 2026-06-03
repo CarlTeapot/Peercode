@@ -980,3 +980,106 @@ fn snapshot_version_mismatch_returns_error() {
     let result = Snapshot::decode(&bytes);
     assert!(result.is_err());
 }
+
+#[test]
+fn prune_after_gc_drops_confirmed_ranges_from_snapshot() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap(); // tombstone "hello" -> delete_set client1:[0,5)
+    assert!(!doc.to_snapshot().delete_set.is_empty());
+
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+    doc.prune_after_gc(&confirmed);
+
+    let snap = doc.to_snapshot();
+    assert!(
+        snap.delete_set.is_empty(),
+        "confirmed range must be pruned from delete_set"
+    );
+    assert!(snap.seen_delete_set.is_empty());
+    assert_eq!(
+        doc.get_text(),
+        " world",
+        "pruning must not affect visible text"
+    );
+}
+
+#[test]
+fn split_gc_erased_block_preserves_lengths() {
+    let (mut doc, id) = doc_with_single_block("hello"); // client 1, [0,5)
+    doc.store.get_mut(&id).unwrap().is_deleted = true;
+    assert!(doc.store.erase_content(&id), "content should be erased");
+    assert!(doc.store.get(&id).unwrap().is_empty());
+    assert_eq!(doc.store.get(&id).unwrap().len, 5);
+
+    doc.split_block(id, 2).unwrap();
+
+    let left = doc.store.get(&id).unwrap();
+    assert_eq!(left.len, 2, "left half keeps offset length");
+    assert!(left.is_deleted && left.is_empty());
+    let right_id = left.right().unwrap();
+    assert_eq!(right_id, id.at_offset(2));
+    let right = doc.store.get(&right_id).unwrap();
+    assert_eq!(right.len, 3, "right half keeps remaining length");
+    assert!(right.is_deleted && right.is_empty());
+}
+
+#[test]
+fn collect_garbage_erases_content_and_is_idempotent() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap();
+
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+
+    let first = doc.collect_garbage(&confirmed).unwrap();
+    assert!(
+        first.is_empty(),
+        "GC of an already-applied local delete emits no UI changes"
+    );
+    let blk = doc.store.get(&block_id(1, 0)).unwrap();
+    assert!(blk.is_deleted && blk.is_empty(), "content erased");
+    assert_eq!(doc.get_text(), " world");
+
+    let second = doc.collect_garbage(&confirmed).unwrap();
+    assert!(second.is_empty());
+    assert_eq!(doc.get_text(), " world");
+    assert!(doc.to_snapshot().delete_set.is_empty());
+}
+
+#[test]
+fn remote_insert_with_origin_inside_erased_block_still_integrates() {
+    // Regression: a delayed insert whose origin is inside a GC-erased block must
+    // still integrate (the block stays id-resolvable, so pre_split re-splits it).
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(99));
+
+    doc.remote_insert(Block::new(block_id(1, 0), None, None, "abcde".to_string()))
+        .unwrap();
+    assert_eq!(doc.get_text(), "abcde");
+
+    let mut ds = DeleteSet::new();
+    ds.add(block_id(1, 0), 5);
+    doc.apply_delete_set(&ds).unwrap();
+    doc.collect_garbage(&ds).unwrap();
+    assert!(doc.store.get(&block_id(1, 0)).unwrap().is_empty());
+
+    // origin_left = (1,1): interior of the erased block
+    let x = Block::new(
+        BlockId::new(ClientId::new(2), Clock::new(0)),
+        Some(block_id(1, 1)),
+        None,
+        "X".to_string(),
+    );
+    let changes = doc.remote_insert(x).unwrap();
+
+    assert_eq!(doc.get_text(), "X", "delayed insert integrates after GC");
+    assert_eq!(changes.len(), 1);
+}

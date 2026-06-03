@@ -1,10 +1,12 @@
 use crate::processes::types::{CombinedWorkflowResult, Sidecar, SidecarStatus};
 use crate::state::document::DocSender;
+use crate::state::gc_coordinator::GcEvent;
 use crate::state::ws_state::WsState;
 use log::{info, warn};
 #[cfg(debug_assertions)]
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
+use tokio::sync::mpsc;
 
 pub use crate::state::app_role::AppRole;
 
@@ -13,6 +15,8 @@ pub struct AppState {
     pub(crate) role: Mutex<AppRole>,
     pub processes: Mutex<HostProcesses>,
     pub current_document_name: Mutex<Option<String>>,
+    /// Sender into the host `GcCoordinator`; `None` for guests / no session.
+    gc_tx: Mutex<Option<mpsc::Sender<GcEvent>>>,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
 }
@@ -60,13 +64,24 @@ impl AppState {
                 tunnel_public_url: None,
             }),
             current_document_name: Mutex::new(None),
+            gc_tx: Mutex::new(None),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
         }
     }
 
     pub fn leave_session(&self, ws: &WsState) {
+        self.set_gc_event_sender(None);
         ws.disconnect_nowait();
+    }
+
+    /// Clearing the sender drops the coordinator's last handle, stopping it.
+    pub fn set_gc_event_sender(&self, tx: Option<mpsc::Sender<GcEvent>>) {
+        *self.gc_tx.lock().unwrap() = tx;
+    }
+
+    pub fn gc_event_sender(&self) -> Option<mpsc::Sender<GcEvent>> {
+        self.gc_tx.lock().unwrap().clone()
     }
 
     pub fn gateway_auth_token(&self) -> Option<String> {

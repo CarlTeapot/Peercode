@@ -1,4 +1,4 @@
-use super::Document;
+use super::{Document, RemoteChange};
 use crate::error::DocumentError;
 use crate::store::DeleteSet;
 use crate::structs::Block;
@@ -179,13 +179,21 @@ impl Document {
         Ok(diff)
     }
 
-    /// Reclaim storage for every block whose tombstone is covered by
-    /// `confirmed`. Content bytes are cleared
-    pub fn collect_garbage(&mut self, confirmed: &DeleteSet) {
+    /// Reclaim tombstones covered by `confirmed`: defensively re-apply the
+    /// deletes (returning any this peer hadn't seen), erase the tombstone content
+    /// (blocks are kept, so ids still resolve and integration is unaffected), and
+    /// prune the snapshot-only delete sets. Idempotent.
+    pub fn collect_garbage(
+        &mut self,
+        confirmed: &DeleteSet,
+    ) -> Result<Vec<RemoteChange>, DocumentError> {
         debug!(
             "garbage-collect start: confirmed_ranges={}",
             confirmed.iter().count()
         );
+
+        let changes = self.apply_delete_set(confirmed)?;
+
         let mut erased_blocks = 0_u64;
         for (client, range) in confirmed.iter() {
             let mut current_clock = range.start;
@@ -199,14 +207,27 @@ impl Document {
                 };
                 let next_clock = block.id.clock.value + block.len;
 
-                self.store.erase_content(&id);
-                erased_blocks += 1;
+                if self.store.erase_content(&id) {
+                    erased_blocks += 1;
+                }
                 current_clock = next_clock;
             }
         }
+
+        self.prune_after_gc(confirmed);
+
         debug!(
-            "garbage-collect outcome: erased content for {} tombstoned blocks",
-            erased_blocks
+            "garbage-collect outcome: erased {} tombstoned blocks, {} replayed change(s)",
+            erased_blocks,
+            changes.len()
         );
+        Ok(changes)
+    }
+
+    /// Drop `confirmed` from the snapshot-only `delete_set`/`seen_delete_set`
+    /// (the deletion stays encoded by each block's `is_deleted` flag). Idempotent.
+    pub fn prune_after_gc(&mut self, confirmed: &DeleteSet) {
+        self.delete_set.subtract(confirmed);
+        self.seen_delete_set.subtract(confirmed);
     }
 }

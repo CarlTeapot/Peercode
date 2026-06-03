@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -9,6 +10,9 @@ const (
 	PrefixOp       byte = 0x00
 	PrefixSnapshot byte = 0x01
 	PrefixControl  byte = 0x02
+	PrefixGcCommit byte = 0x04
+	PrefixPresence byte = 0x05
+	PrefixSvReport byte = 0x06
 )
 
 const (
@@ -16,8 +20,23 @@ const (
 	ControlSnapshotRequest byte = 0x02
 )
 
+const (
+	PresenceJoined byte = 0x01
+	PresenceLeft   byte = 0x02
+)
+
 func EncodeControlFrame(controlType byte) []byte {
 	return []byte{PrefixControl, controlType}
+}
+
+// EncodePresenceFrame builds the fixed 10-byte layout
+// [PrefixPresence][event][clientID uint64 BE], pinned by the protocol-drift tests.
+func EncodePresenceFrame(clientID uint64, event byte) []byte {
+	out := make([]byte, 10)
+	out[0] = PrefixPresence
+	out[1] = event
+	binary.BigEndian.PutUint64(out[2:], clientID)
+	return out
 }
 
 var (
@@ -30,7 +49,8 @@ func ValidateFrame(frame []byte) error {
 		return ErrEmptyFrame
 	}
 	switch frame[0] {
-	case PrefixOp, PrefixSnapshot:
+	// PrefixPresence is gateway-authored only; an inbound one is rejected.
+	case PrefixOp, PrefixSnapshot, PrefixGcCommit, PrefixSvReport:
 		return nil
 	default:
 		return fmt.Errorf("%w: 0x%02X", ErrUnknownPrefix, frame[0])

@@ -10,6 +10,8 @@ pub use document::{Document, RemoteChange};
 pub use error::DocumentError;
 pub use snapshot::{Snapshot, SnapshotBlock, SnapshotError};
 pub use wire::{
-    OP_PREFIX, OpMessage, SNAPSHOT_PREFIX, WireBlock, WireError, decode_op, decode_snapshot,
-    encode_op, encode_snapshot,
+    OP_PREFIX, OpMessage, PREFIX_GC_COMMIT, PREFIX_PRESENCE, PREFIX_SV_REPORT, PresenceEvent,
+    PresenceFrame, SNAPSHOT_PREFIX, WireBlock, WireError, decode_gc_commit, decode_op,
+    decode_presence, decode_snapshot, decode_sv_report, encode_gc_commit, encode_op,
+    encode_presence, encode_snapshot, encode_sv_report,
 };
