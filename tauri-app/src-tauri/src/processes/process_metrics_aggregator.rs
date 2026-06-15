@@ -1,71 +1,135 @@
-use crate::processes::types::{TunnelMetricsEventPayload, TunnelMetricsResponse};
+use crate::processes::types::{
+    GatewayMetricsEventPayload, GatewayMetricsResponse, GatewayMetricsSource,
+    TunnelMetricsEventPayload, TunnelMetricsResponse, TunnelMetricsSource, GATEWAY_METRICS_EVENT,
+    TUNNEL_METRICS_EVENT,
+};
 use log::{debug, warn};
+use std::future::Future;
 use std::time::Duration;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
 use tokio::time::{interval, MissedTickBehavior};
 
-pub const TUNNEL_METRICS_EVENT: &str = "process://tunnel-metrics";
+pub trait MetricsSource: Send + Sync + 'static {
+    type Metrics: Send + 'static;
+    type EventPayload: Clone + serde::Serialize;
 
-pub fn spawn_tunnel_metrics_aggregator(
+    const NAME: &'static str;
+    const EVENT: &'static str;
+
+    fn fetch(
+        &self,
+        client: &reqwest::Client,
+        request_timeout: Duration,
+    ) -> impl Future<Output = Result<Self::Metrics, String>> + Send;
+
+    fn payload(metrics: Option<Self::Metrics>, error: Option<String>) -> Self::EventPayload;
+}
+
+pub fn spawn_metrics_aggregator<S>(
     app: AppHandle,
-    metrics_url: String,
+    source: S,
     poll_interval: Duration,
-) -> JoinHandle<()> {
+) -> JoinHandle<()>
+where
+    S: MetricsSource,
+{
     tauri::async_runtime::spawn(async move {
         let client = reqwest::Client::new();
         let request_timeout = poll_interval.min(Duration::from_secs(2));
         let mut ticker = interval(poll_interval);
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         debug!(
-            "tunnel metrics aggregator started: interval_ms={}",
+            "{} metrics aggregator started: interval_ms={}",
+            S::NAME,
             poll_interval.as_millis()
         );
 
         loop {
             ticker.tick().await;
-            let payload = match fetch_tunnel_metrics(&client, &metrics_url, request_timeout).await {
-                Ok(metrics) => TunnelMetricsEventPayload {
-                    metrics: Some(metrics),
-                    error: None,
-                },
+            let payload = match source.fetch(&client, request_timeout).await {
+                Ok(metrics) => S::payload(Some(metrics), None),
                 Err(error) => {
-                    warn!("tunnel metrics scrape failed: {error}");
-                    TunnelMetricsEventPayload {
-                        metrics: None,
-                        error: Some(error),
-                    }
+                    warn!("{} metrics scrape failed: {error}", S::NAME);
+                    S::payload(None, Some(error))
                 }
             };
 
-            if let Err(error) = app.emit(TUNNEL_METRICS_EVENT, payload) {
-                warn!("failed to emit tunnel metrics event: {error}");
+            if let Err(error) = app.emit(S::EVENT, payload) {
+                warn!("failed to emit {} metrics event: {error}", S::NAME);
             }
         }
     })
 }
 
-async fn fetch_tunnel_metrics(
-    client: &reqwest::Client,
-    metrics_url: &str,
-    request_timeout: Duration,
-) -> Result<TunnelMetricsResponse, String> {
-    let body = client
-        .get(metrics_url)
-        .timeout(request_timeout)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch Cloudflare tunnel metrics: {e}"))?
-        .error_for_status()
-        .map_err(|e| format!("Cloudflare tunnel metrics returned an error: {e}"))?
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read Cloudflare tunnel metrics: {e}"))?;
+impl MetricsSource for TunnelMetricsSource {
+    type Metrics = TunnelMetricsResponse;
+    type EventPayload = TunnelMetricsEventPayload;
 
-    parse_tunnel_metrics(&body)
+    const NAME: &'static str = "tunnel";
+    const EVENT: &'static str = TUNNEL_METRICS_EVENT;
+
+    fn fetch(
+        &self,
+        client: &reqwest::Client,
+        request_timeout: Duration,
+    ) -> impl Future<Output = Result<Self::Metrics, String>> + Send {
+        async move {
+            let body = client
+                .get(&self.metrics_url)
+                .timeout(request_timeout)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to fetch Cloudflare tunnel metrics: {e}"))?
+                .error_for_status()
+                .map_err(|e| format!("Cloudflare tunnel metrics returned an error: {e}"))?
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read Cloudflare tunnel metrics: {e}"))?;
+
+            parse_tunnel_metrics(&body)
+        }
+    }
+
+    fn payload(metrics: Option<Self::Metrics>, error: Option<String>) -> Self::EventPayload {
+        TunnelMetricsEventPayload { metrics, error }
+    }
 }
 
-fn parse_tunnel_metrics(body: &str) -> Result<TunnelMetricsResponse, String> {
+impl MetricsSource for GatewayMetricsSource {
+    type Metrics = GatewayMetricsResponse;
+    type EventPayload = GatewayMetricsEventPayload;
+
+    const NAME: &'static str = "gateway";
+    const EVENT: &'static str = GATEWAY_METRICS_EVENT;
+
+    fn fetch(
+        &self,
+        client: &reqwest::Client,
+        request_timeout: Duration,
+    ) -> impl Future<Output = Result<Self::Metrics, String>> + Send {
+        async move {
+            client
+                .get(&self.metrics_url)
+                .bearer_auth(&self.auth_token)
+                .timeout(request_timeout)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to fetch gateway metrics: {e}"))?
+                .error_for_status()
+                .map_err(|e| format!("Gateway metrics returned an error: {e}"))?
+                .json::<GatewayMetricsResponse>()
+                .await
+                .map_err(|e| format!("Failed to decode gateway metrics: {e}"))
+        }
+    }
+
+    fn payload(metrics: Option<Self::Metrics>, error: Option<String>) -> Self::EventPayload {
+        GatewayMetricsEventPayload { metrics, error }
+    }
+}
+
+pub fn parse_tunnel_metrics(body: &str) -> Result<TunnelMetricsResponse, String> {
     let mut ha_connections = None;
     let mut register_successes = 0;
     let mut request_errors = None;

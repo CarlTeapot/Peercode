@@ -25,6 +25,7 @@ pub struct HostProcesses {
     pub gateway_port: Option<u16>,
     pub gateway_lan_url: Option<String>,
     pub tunnel_public_url: Option<String>,
+    pub gateway_metrics_task: Option<JoinHandle<()>>,
     pub tunnel_metrics_task: Option<JoinHandle<()>>,
 }
 
@@ -60,6 +61,7 @@ impl AppState {
                 gateway_port: None,
                 gateway_lan_url: None,
                 tunnel_public_url: None,
+                gateway_metrics_task: None,
                 tunnel_metrics_task: None,
             }),
             current_document_name: Mutex::new(None),
@@ -84,6 +86,9 @@ impl AppState {
         let mut procs = self.processes.lock().unwrap();
         let had_tunnel = procs.tunnel.is_some();
         let had_gateway = procs.gateway.is_some();
+        if let Some(task) = procs.gateway_metrics_task.take() {
+            task.abort();
+        }
         if let Some(task) = procs.tunnel_metrics_task.take() {
             task.abort();
         }

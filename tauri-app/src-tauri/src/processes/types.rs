@@ -1,6 +1,9 @@
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tokio::sync::mpsc::Receiver;
 
+pub const TUNNEL_METRICS_EVENT: &str = "process://tunnel-metrics";
+pub const GATEWAY_METRICS_EVENT: &str = "process://gateway-metrics";
+
 #[derive(serde::Serialize, Clone, PartialEq)]
 pub enum SidecarStatus {
     Enabled,
@@ -72,4 +75,28 @@ pub struct GatewayMetricsResponse {
 pub struct GatewayMetricsEventPayload {
     pub metrics: Option<GatewayMetricsResponse>,
     pub error: Option<String>,
+}
+
+pub struct TunnelMetricsSource {
+    pub(crate) metrics_url: String,
+}
+
+impl TunnelMetricsSource {
+    pub fn new(metrics_url: String) -> Self {
+        Self { metrics_url }
+    }
+}
+
+pub struct GatewayMetricsSource {
+    pub(crate) metrics_url: String,
+    pub(crate) auth_token: String,
+}
+
+impl GatewayMetricsSource {
+    pub fn new(metrics_url: String, auth_token: String) -> Self {
+        Self {
+            metrics_url,
+            auth_token,
+        }
+    }
 }
