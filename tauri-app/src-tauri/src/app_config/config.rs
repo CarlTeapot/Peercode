@@ -9,6 +9,7 @@ const RAW_CONFIG: &str = include_str!("../../peercode.config.toml");
 pub struct AppConfig {
     pub websocket: WebsocketConfig,
     pub logging: LoggingConfig,
+    pub metrics: MetricsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -67,6 +68,17 @@ pub struct WebsocketConfig {
 impl WebsocketConfig {
     pub fn connect_timeout(&self) -> Duration {
         Duration::from_millis(self.connect_timeout_ms)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetricsConfig {
+    pub poll_interval_ms: u64,
+}
+
+impl MetricsConfig {
+    pub fn poll_interval(&self) -> Duration {
+        Duration::from_millis(self.poll_interval_ms.max(250))
     }
 }
 

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	gatewaymetrics "gateway/internal/metrics"
+
 	"gateway/internal/hub"
 )
 
@@ -37,7 +39,8 @@ func main() {
 
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	h := hub.New()
+	metrics := gatewaymetrics.New()
+	h := hub.New(metrics)
 
 	mux := http.NewServeMux()
 	if rpm := parseWSRateLimitRPM(); rpm > 0 {
@@ -53,6 +56,7 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	mux.HandleFunc("/metrics", metricsHandler(metrics))
 
 	srv := &http.Server{Handler: bearerAuthFilter(authToken, mux)}
 	serveErr := make(chan error, 1)
