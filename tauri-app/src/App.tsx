@@ -599,9 +599,7 @@ function AppContent({ username }: AppContentProps) {
         ]);
         const primaryChange = changes[0];
         if (primaryChange) {
-          editorInstance.setPosition(
-            model.getPositionAt(primaryChange.offset),
-          );
+          editorInstance.setPosition(model.getPositionAt(primaryChange.offset));
         }
         isApplyingRemote.current = false;
 
