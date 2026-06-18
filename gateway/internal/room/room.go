@@ -243,9 +243,10 @@ func (r *Room) getPeers(exclude *client.Client) []*client.Client {
 func (r *Room) sendToPeers(targets []*client.Client, data []byte, slowClientLogMsg string) {
 	for _, c := range targets {
 		if !c.Send(data) {
-			r.metrics.SlowClientDisconnected()
-			slog.Warn(slowClientLogMsg, "room_id", r.ID, "client_id", c.ID)
-			c.ForceClose()
+			if c.ForceClose() {
+				r.metrics.SlowClientDisconnected()
+				slog.Warn(slowClientLogMsg, "room_id", r.ID, "client_id", c.ID)
+			}
 		} else {
 			r.metrics.MessageRelayed(len(data))
 		}

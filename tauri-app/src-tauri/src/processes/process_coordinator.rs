@@ -4,9 +4,7 @@ use crate::processes::gateway_process::run_gateway;
 use crate::processes::process_logger::pipe_process_logs;
 use crate::processes::process_metrics_aggregator::spawn_metrics_aggregator;
 use crate::processes::tunnel_process::run_cloudflared;
-use crate::processes::types::{
-    CombinedWorkflowResult, GatewayMetricsSource, TunnelMetricsSource,
-};
+use crate::processes::types::{CombinedWorkflowResult, GatewayMetricsSource, TunnelMetricsSource};
 use crate::state::appstate::AppState;
 use log::{debug, error, info, warn};
 use tauri::{AppHandle, Manager};

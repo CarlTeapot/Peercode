@@ -131,7 +131,7 @@ impl MetricsSource for GatewayMetricsSource {
 
 pub fn parse_tunnel_metrics(body: &str) -> Result<TunnelMetricsResponse, String> {
     let mut ha_connections = None;
-    let mut register_successes = 0;
+    let mut register_successes = None;
     let mut request_errors = None;
     let mut edge_location = None;
 
@@ -149,7 +149,7 @@ pub fn parse_tunnel_metrics(body: &str) -> Result<TunnelMetricsResponse, String>
                 ha_connections = Some(metric_u64(metric_name, value)?);
             }
             "cloudflared_tunnel_tunnel_register_success" => {
-                register_successes += metric_u64(metric_name, value)?;
+                *register_successes.get_or_insert(0) += metric_u64(metric_name, value)?;
             }
             "cloudflared_tunnel_request_errors" => {
                 request_errors = Some(metric_u64(metric_name, value)?);
@@ -164,7 +164,9 @@ pub fn parse_tunnel_metrics(body: &str) -> Result<TunnelMetricsResponse, String>
     Ok(TunnelMetricsResponse {
         ha_connections: ha_connections
             .ok_or_else(|| "cloudflared_tunnel_ha_connections metric is missing".to_string())?,
-        register_successes,
+        register_successes: register_successes.ok_or_else(|| {
+            "cloudflared_tunnel_tunnel_register_success metric is missing".to_string()
+        })?,
         request_errors: request_errors
             .ok_or_else(|| "cloudflared_tunnel_request_errors metric is missing".to_string())?,
         edge_location,
@@ -211,6 +213,19 @@ cloudflared_tunnel_server_locations{connection_id="0",edge_location="fra03"} 0
                 request_errors: 2,
                 edge_location: Some("ist07".to_string()),
             }
+        );
+    }
+
+    #[test]
+    fn fails_when_register_successes_missing() {
+        let body = r#"
+cloudflared_tunnel_ha_connections 1
+cloudflared_tunnel_request_errors 0
+"#;
+        let err = parse_tunnel_metrics(body).unwrap_err();
+        assert!(
+            err.contains("cloudflared_tunnel_tunnel_register_success"),
+            "unexpected error: {err}"
         );
     }
 }
