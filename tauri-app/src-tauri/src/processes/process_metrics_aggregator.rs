@@ -69,26 +69,24 @@ impl MetricsSource for TunnelMetricsSource {
     const NAME: &'static str = "tunnel";
     const EVENT: &'static str = TUNNEL_METRICS_EVENT;
 
-    fn fetch(
+    async fn fetch(
         &self,
         client: &reqwest::Client,
         request_timeout: Duration,
-    ) -> impl Future<Output = Result<Self::Metrics, String>> + Send {
-        async move {
-            let body = client
-                .get(&self.metrics_url)
-                .timeout(request_timeout)
-                .send()
-                .await
-                .map_err(|e| format!("Failed to fetch Cloudflare tunnel metrics: {e}"))?
-                .error_for_status()
-                .map_err(|e| format!("Cloudflare tunnel metrics returned an error: {e}"))?
-                .text()
-                .await
-                .map_err(|e| format!("Failed to read Cloudflare tunnel metrics: {e}"))?;
+    ) -> Result<Self::Metrics, String> {
+        let body = client
+            .get(&self.metrics_url)
+            .timeout(request_timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch Cloudflare tunnel metrics: {e}"))?
+            .error_for_status()
+            .map_err(|e| format!("Cloudflare tunnel metrics returned an error: {e}"))?
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read Cloudflare tunnel metrics: {e}"))?;
 
-            parse_tunnel_metrics(&body)
-        }
+        parse_tunnel_metrics(&body)
     }
 
     fn payload(metrics: Option<Self::Metrics>, error: Option<String>) -> Self::EventPayload {
@@ -103,25 +101,23 @@ impl MetricsSource for GatewayMetricsSource {
     const NAME: &'static str = "gateway";
     const EVENT: &'static str = GATEWAY_METRICS_EVENT;
 
-    fn fetch(
+    async fn fetch(
         &self,
         client: &reqwest::Client,
         request_timeout: Duration,
-    ) -> impl Future<Output = Result<Self::Metrics, String>> + Send {
-        async move {
-            client
-                .get(&self.metrics_url)
-                .bearer_auth(&self.auth_token)
-                .timeout(request_timeout)
-                .send()
-                .await
-                .map_err(|e| format!("Failed to fetch gateway metrics: {e}"))?
-                .error_for_status()
-                .map_err(|e| format!("Gateway metrics returned an error: {e}"))?
-                .json::<GatewayMetricsResponse>()
-                .await
-                .map_err(|e| format!("Failed to decode gateway metrics: {e}"))
-        }
+    ) -> Result<Self::Metrics, String> {
+        client
+            .get(&self.metrics_url)
+            .bearer_auth(&self.auth_token)
+            .timeout(request_timeout)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch gateway metrics: {e}"))?
+            .error_for_status()
+            .map_err(|e| format!("Gateway metrics returned an error: {e}"))?
+            .json::<GatewayMetricsResponse>()
+            .await
+            .map_err(|e| format!("Failed to decode gateway metrics: {e}"))
     }
 
     fn payload(metrics: Option<Self::Metrics>, error: Option<String>) -> Self::EventPayload {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gateway/internal/client"
+	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/wire"
 )
 
@@ -17,7 +18,7 @@ func init() {
 }
 
 func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
-	r := New("room-1")
+	r := New("room-1", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -47,7 +48,7 @@ func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
 }
 
 func TestRoom_SendToEmptyIsNoop(t *testing.T) {
-	r := New("room-2")
+	r := New("room-2", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -68,7 +69,7 @@ func TestRoom_SendToEmptyIsNoop(t *testing.T) {
 }
 
 func TestRoom_DoubleLeaveIsSilent(t *testing.T) {
-	r := New("room-3")
+	r := New("room-3", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -92,7 +93,7 @@ func TestRoom_DoubleLeaveIsSilent(t *testing.T) {
 }
 
 func TestRoom_JoinAfterCloseIsRejected(t *testing.T) {
-	r := New("room-4")
+	r := New("room-4", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -111,7 +112,7 @@ func TestRoom_JoinAfterCloseIsRejected(t *testing.T) {
 }
 
 func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
-	r := New("room-snap")
+	r := New("room-snap", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -185,7 +186,7 @@ done:
 }
 
 func TestRoom_DuplicateClientIDRejected(t *testing.T) {
-	r := New("room-dup")
+	r := New("room-dup", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 

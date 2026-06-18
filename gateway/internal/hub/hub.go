@@ -33,11 +33,7 @@ type Hub struct {
 	metrics *gatewaymetrics.Registry
 }
 
-func New(registries ...*gatewaymetrics.Registry) *Hub {
-	registry := gatewaymetrics.New()
-	if len(registries) > 0 && registries[0] != nil {
-		registry = registries[0]
-	}
+func New(registry *gatewaymetrics.Registry) *Hub {
 	return &Hub{rooms: make(map[string]*room.Room), metrics: registry}
 }
 

@@ -42,11 +42,7 @@ type Room struct {
 	metrics *gatewaymetrics.Registry
 }
 
-func New(id string, registries ...*gatewaymetrics.Registry) *Room {
-	registry := gatewaymetrics.New()
-	if len(registries) > 0 && registries[0] != nil {
-		registry = registries[0]
-	}
+func New(id string, registry *gatewaymetrics.Registry) *Room {
 	return &Room{
 		ID:      id,
 		clients: make(map[*client.Client]struct{}),
