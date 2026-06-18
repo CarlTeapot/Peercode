@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gateway/internal/client"
+	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/wire"
 )
 
@@ -37,14 +38,17 @@ type Room struct {
 
 	ops  chan BroadcastMsg
 	done chan struct{}
+
+	metrics *gatewaymetrics.Registry
 }
 
-func New(id string) *Room {
+func New(id string, registry *gatewaymetrics.Registry) *Room {
 	return &Room{
 		ID:      id,
 		clients: make(map[*client.Client]struct{}),
 		ops:     make(chan BroadcastMsg, opsBufferSize),
 		done:    make(chan struct{}),
+		metrics: registry,
 	}
 }
 
@@ -62,10 +66,13 @@ func (r *Room) Join(c *client.Client) error {
 		}
 	}
 	r.clients[c] = struct{}{}
+	isHost := false
 	if r.host == nil {
 		r.host = c
+		isHost = true
 		slog.Info("host client registered", "room_id", r.ID, "client_id", c.ID)
 	}
+	r.metrics.ClientJoined(isHost)
 	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "size", len(r.clients))
 	return nil
 }
@@ -78,9 +85,11 @@ func (r *Room) Leave(c *client.Client, onEmpty func()) {
 		return
 	}
 	delete(r.clients, c)
-	if r.host == c {
+	wasHost := r.host == c
+	if wasHost {
 		r.host = nil
 	}
+	r.metrics.ClientLeft(wasHost)
 	c.CloseSend()
 	empty := len(r.clients) == 0
 	if empty {
@@ -117,6 +126,7 @@ func (r *Room) ReplayTo(c *client.Client) bool {
 	r.mu.Unlock()
 
 	if !host.Send(wire.EncodeControlFrame(wire.ControlSnapshotRequest)) {
+		r.metrics.ReplayFailed()
 		r.removeSnapshotRequest(waiter)
 		slog.Warn("replay: failed to request snapshot from host", "room_id", r.ID, "client_id", c.ID, "host_id", host.ID)
 		return false
@@ -127,16 +137,19 @@ func (r *Room) ReplayTo(c *client.Client) bool {
 	select {
 	case snap = <-waiter:
 	case <-time.After(snapshotResponseTimeout):
+		r.metrics.ReplayFailed()
 		r.removeSnapshotRequest(waiter)
 		slog.Warn("replay: timed out waiting for host snapshot", "room_id", r.ID, "client_id", c.ID, "host_id", host.ID)
 		return false
 	}
 
 	if !c.Send(snap) {
+		r.metrics.ReplayFailed()
 		r.removeSnapshotRequest(waiter)
 		slog.Warn("replay: failed to send snapshot to joiner", "room_id", r.ID, "client_id", c.ID)
 		return false
 	}
+	r.metrics.ReplaySucceeded()
 	slog.Info("replay: snapshot sent to joiner", "room_id", r.ID, "client_id", c.ID, "snapshot_bytes", len(snap))
 	return true
 }
@@ -226,8 +239,12 @@ func (r *Room) getPeers(exclude *client.Client) []*client.Client {
 func (r *Room) sendToPeers(targets []*client.Client, data []byte, slowClientLogMsg string) {
 	for _, c := range targets {
 		if !c.Send(data) {
-			slog.Warn(slowClientLogMsg, "room_id", r.ID, "client_id", c.ID)
-			c.ForceClose()
+			if c.ForceClose() {
+				r.metrics.SlowClientDisconnected()
+				slog.Warn(slowClientLogMsg, "room_id", r.ID, "client_id", c.ID)
+			}
+		} else {
+			r.metrics.MessageRelayed(len(data))
 		}
 	}
 }

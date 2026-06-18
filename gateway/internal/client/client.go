@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 
 	"github.com/coder/websocket"
 )
@@ -14,6 +15,7 @@ type Client struct {
 	RoomID string
 	conn   *websocket.Conn
 	send   chan []byte
+	closed atomic.Bool
 }
 
 func New(id, roomID string, conn *websocket.Conn) *Client {
@@ -52,13 +54,20 @@ func (c *Client) SendChan() <-chan []byte {
 	return c.send
 }
 
-func (c *Client) ForceClose() {
+// ForceClose closes the websocket connection. It is idempotent: only the first
+// call performs the close; subsequent calls are no-ops. Returns true on the
+// first call so callers can count the real disconnect exactly once.
+func (c *Client) ForceClose() (first bool) {
+	if !c.closed.CompareAndSwap(false, true) {
+		return false
+	}
 	if c.conn == nil {
 		slog.Debug("force-close skipped: client connection is nil", "room_id", c.RoomID, "client_id", c.ID)
-		return
+		return true
 	}
 	slog.Warn("force-closing client websocket due to slow consumer", "room_id", c.RoomID, "client_id", c.ID)
 	go c.conn.Close(websocket.StatusPolicyViolation, "slow consumer")
+	return true
 }
 
 // reads frames from the websocket and pushes each payload onto

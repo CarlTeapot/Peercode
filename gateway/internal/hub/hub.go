@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gateway/internal/client"
+	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/room"
 	"gateway/internal/wire"
 )
@@ -27,12 +28,13 @@ const maxRoomJoinRetries = 3
 const maxInboundMessageBytes = 64 * 1024 * 1024
 
 type Hub struct {
-	mu    sync.Mutex
-	rooms map[string]*room.Room
+	mu      sync.Mutex
+	rooms   map[string]*room.Room
+	metrics *gatewaymetrics.Registry
 }
 
-func New() *Hub {
-	return &Hub{rooms: make(map[string]*room.Room)}
+func New(registry *gatewaymetrics.Registry) *Hub {
+	return &Hub{rooms: make(map[string]*room.Room), metrics: registry}
 }
 
 func newRoomID() (string, error) {
@@ -65,8 +67,9 @@ func (h *Hub) getOrCreateRoom(id string) *room.Room {
 	defer h.mu.Unlock()
 	r, ok := h.rooms[id]
 	if !ok {
-		r = room.New(id)
+		r = room.New(id, h.metrics)
 		h.rooms[id] = r
+		h.metrics.RoomOpened()
 		go r.Run()
 		slog.Info("room created", "room_id", id)
 	} else {
@@ -80,6 +83,7 @@ func (h *Hub) discardIfStale(id string, r *room.Room) {
 	defer h.mu.Unlock()
 	if h.rooms[id] == r {
 		delete(h.rooms, id)
+		h.metrics.RoomClosed()
 		slog.Info("room discarded from hub", "room_id", id)
 	} else {
 		slog.Debug("discard skipped: room reference is stale", "room_id", id)
@@ -143,8 +147,9 @@ func readWSParams(w http.ResponseWriter, r *http.Request) (roomID, clientID stri
 	return roomID, clientID, true
 }
 
-func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
+func (h *Hub) dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 	if err := wire.ValidateFrame(raw); err != nil {
+		h.metrics.FrameDropped()
 		slog.Warn(
 			"dropping invalid frame",
 			"room_id", rm.ID,
@@ -175,6 +180,7 @@ func dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
 			"bytes", len(raw),
 		)
 	case <-t.C:
+		h.metrics.FrameDropped()
 		slog.Warn(
 			"room ops buffer full; dropping frame after timeout",
 			"room_id", rm.ID,
@@ -255,7 +261,7 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 		select {
 		case raw := <-ops:
 			slog.Debug("received websocket frame from client", "room_id", roomID, "client_id", clientID, "bytes", len(raw))
-			dispatchFrame(rm, c, raw)
+			h.dispatchFrame(rm, c, raw)
 		case <-leave:
 			slog.Info("client signaled leave from read pump", "room_id", roomID, "client_id", clientID)
 			return
