@@ -597,6 +597,10 @@ function AppContent({ username }: AppContentProps) {
             forceMoveMarkers: false,
           },
         ]);
+        const primaryChange = changes[0];
+        if (primaryChange) {
+          editorInstance.setPosition(model.getPositionAt(primaryChange.offset));
+        }
         isApplyingRemote.current = false;
 
         const baseSeq = lastAppliedSeqRef.current;
