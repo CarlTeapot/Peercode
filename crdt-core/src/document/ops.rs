@@ -149,13 +149,7 @@ impl Document {
                 self.split_block(current_id, remaining)?;
             }
 
-            let (deleted_len, next_id) = {
-                let block = self
-                    .store
-                    .mark_deleted(&current_id)
-                    .ok_or(DocumentError::BlockNotFound(current_id))?;
-                (block.len, block.right())
-            };
+            let (deleted_len, next_id) = self.mark_block_deleted(&current_id)?;
 
             self.delete_set.add(current_id, deleted_len);
             diff.add(current_id, deleted_len);

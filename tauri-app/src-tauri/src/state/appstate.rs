@@ -6,6 +6,7 @@ use log::{info, warn};
 #[cfg(debug_assertions)]
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
+use tauri::async_runtime::JoinHandle;
 use tokio::sync::mpsc;
 
 pub use crate::state::app_role::AppRole;
@@ -28,6 +29,8 @@ pub struct HostProcesses {
     pub gateway_port: Option<u16>,
     pub gateway_lan_url: Option<String>,
     pub tunnel_public_url: Option<String>,
+    pub gateway_metrics_task: Option<JoinHandle<()>>,
+    pub tunnel_metrics_task: Option<JoinHandle<()>>,
 }
 
 impl HostProcesses {
@@ -62,6 +65,8 @@ impl AppState {
                 gateway_port: None,
                 gateway_lan_url: None,
                 tunnel_public_url: None,
+                gateway_metrics_task: None,
+                tunnel_metrics_task: None,
             }),
             current_document_name: Mutex::new(None),
             gc_tx: Mutex::new(None),
@@ -96,13 +101,21 @@ impl AppState {
         let mut procs = self.processes.lock().unwrap();
         let had_tunnel = procs.tunnel.is_some();
         let had_gateway = procs.gateway.is_some();
+        if let Some(task) = procs.gateway_metrics_task.take() {
+            task.abort();
+        }
+        if let Some(task) = procs.tunnel_metrics_task.take() {
+            task.abort();
+        }
         self.kill_proc(procs.tunnel.take());
         self.kill_proc(procs.gateway.take());
+        if had_tunnel {
+            procs.tunnel_public_url = None;
+        }
         if had_gateway {
             procs.gateway_auth_token = None;
             procs.gateway_port = None;
             procs.gateway_lan_url = None;
-            procs.tunnel_public_url = None;
         }
         had_gateway || had_tunnel
     }

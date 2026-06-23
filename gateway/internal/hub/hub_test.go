@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/wire"
 )
 
@@ -26,7 +27,7 @@ func init() {
 
 func newTestServer(t *testing.T) (*httptest.Server, *Hub) {
 	t.Helper()
-	h := New()
+	h := New(gatewaymetrics.New())
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.HandleWS)
 	mux.HandleFunc("/rooms", h.HandleCreateRoom)
@@ -345,7 +346,7 @@ func TestHub_FanOut_ThreeClients(t *testing.T) {
 }
 
 func BenchmarkHub_FanOut_1000Ops(b *testing.B) {
-	h := New()
+	h := New(gatewaymetrics.New())
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", h.HandleWS)
 	srv := httptest.NewServer(mux)

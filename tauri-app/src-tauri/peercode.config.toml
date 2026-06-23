@@ -1,6 +1,9 @@
 [websocket]
 connect_timeout_ms = 5000
 
+[metrics]
+poll_interval_ms = 2000
+
 [logging]
 show_gateway_logs = true
 show_cloudflared_logs = false

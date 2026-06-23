@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gateway/internal/client"
+	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/wire"
 )
 
@@ -32,7 +33,7 @@ func init() {
 }
 
 func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
-	r := New("room-1")
+	r := New("room-1", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -62,7 +63,7 @@ func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
 }
 
 func TestRoom_SendToEmptyIsNoop(t *testing.T) {
-	r := New("room-2")
+	r := New("room-2", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -83,7 +84,7 @@ func TestRoom_SendToEmptyIsNoop(t *testing.T) {
 }
 
 func TestRoom_DoubleLeaveIsSilent(t *testing.T) {
-	r := New("room-3")
+	r := New("room-3", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -107,7 +108,7 @@ func TestRoom_DoubleLeaveIsSilent(t *testing.T) {
 }
 
 func TestRoom_JoinAfterCloseIsRejected(t *testing.T) {
-	r := New("room-4")
+	r := New("room-4", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -126,7 +127,7 @@ func TestRoom_JoinAfterCloseIsRejected(t *testing.T) {
 }
 
 func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
-	r := New("room-snap")
+	r := New("room-snap", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -200,7 +201,7 @@ done:
 }
 
 func TestRoom_DuplicateClientIDRejected(t *testing.T) {
-	r := New("room-dup")
+	r := New("room-dup", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
@@ -218,7 +219,7 @@ func TestRoom_DuplicateClientIDRejected(t *testing.T) {
 }
 
 func TestRoom_JoinBroadcastsPresenceToExistingMembers(t *testing.T) {
-	r := New("room-presence-join")
+	r := New("room-presence-join", gatewaymetrics.New())
 	host := client.New("1", "room-presence-join", nil)
 	guest := client.New("2", "room-presence-join", nil)
 
@@ -248,7 +249,7 @@ func TestRoom_JoinBroadcastsPresenceToExistingMembers(t *testing.T) {
 }
 
 func TestRoom_LeaveBroadcastsPresenceToRemaining(t *testing.T) {
-	r := New("room-presence-leave")
+	r := New("room-presence-leave", gatewaymetrics.New())
 	host := client.New("1", "room-presence-leave", nil)
 	guest := client.New("2", "room-presence-leave", nil)
 	_ = r.Join(host)
@@ -271,7 +272,7 @@ func TestRoom_NonNumericClientIDSkipsPresence(t *testing.T) {
 	// Existing tests rely on this: a non-numeric client_id cannot be encoded into
 	// the fixed u64 presence layout, so the join/leave proceeds without presence
 	// rather than failing.
-	r := New("room-presence-nonnumeric")
+	r := New("room-presence-nonnumeric", gatewaymetrics.New())
 	host := client.New("1", "room-presence-nonnumeric", nil)
 	weird := client.New("not-a-number", "room-presence-nonnumeric", nil)
 	_ = r.Join(host)
@@ -286,7 +287,7 @@ func TestRoom_NonNumericClientIDSkipsPresence(t *testing.T) {
 }
 
 func TestRoom_GcCommitBroadcastsToPeers(t *testing.T) {
-	r := New("room-gc")
+	r := New("room-gc", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 

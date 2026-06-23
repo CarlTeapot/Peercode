@@ -22,6 +22,7 @@ import {
   errorStyle,
 } from "./usernameSetup";
 import { FileMenu } from "./FileMenu";
+import { MetricsPopup, type MetricsPopupField } from "./MetricsPopup";
 import "./App.css";
 
 type SessionNotice = "ended" | "disconnected";
@@ -50,6 +51,56 @@ interface LogEntry {
   operationLabel: string;
   payload: string;
   wireMessage?: string;
+}
+
+interface TunnelMetrics {
+  ha_connections: number;
+  register_successes: number;
+  request_errors: number;
+  edge_location: string | null;
+}
+
+interface GatewayMetrics {
+  healthy: boolean;
+  uptime_seconds: number;
+  active_rooms: number;
+  connected_clients: number;
+  active_hosts: number;
+  relayed_messages: number;
+  relayed_bytes: number;
+  replay_successes: number;
+  replay_failures: number;
+  dropped_frames: number;
+  slow_client_disconnects: number;
+}
+
+const EDGE_CITIES: Record<string, string> = {
+  ams: "Amsterdam",
+  cdg: "Paris",
+  fra: "Frankfurt",
+  ist: "Istanbul",
+  lhr: "London",
+  vie: "Vienna",
+  waw: "Warsaw",
+};
+
+function edgeLocationLabel(location: string | null): string {
+  if (!location) return "Unknown edge";
+  const city = EDGE_CITIES[location.slice(0, 3).toLowerCase()];
+  return city ? `${city} (${location})` : location.toUpperCase();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
 // --- Save-before-session modal ---
@@ -298,6 +349,107 @@ function AppContent({ username }: AppContentProps) {
     gateway: "Disabled" as "Enabled" | "Disabled",
     tunnel: "Disabled" as "Enabled" | "Disabled",
   });
+  const [tunnelMetrics, setTunnelMetrics] = useState<TunnelMetrics | null>(
+    null,
+  );
+  const [tunnelMetricsError, setTunnelMetricsError] = useState<string | null>(
+    null,
+  );
+  const [recentTunnelErrors, setRecentTunnelErrors] = useState(0);
+  const [gatewayMetrics, setGatewayMetrics] = useState<GatewayMetrics | null>(
+    null,
+  );
+  const [gatewayMetricsError, setGatewayMetricsError] = useState<string | null>(
+    null,
+  );
+  const [recentGatewayReplayFailures, setRecentGatewayReplayFailures] =
+    useState(0);
+  const [recentGatewayDroppedFrames, setRecentGatewayDroppedFrames] =
+    useState(0);
+  const [showGatewayMetrics, setShowGatewayMetrics] = useState(false);
+  const [showTunnelMetrics, setShowTunnelMetrics] = useState(false);
+  const previousTunnelMetricsRef = useRef<TunnelMetrics | null>(null);
+  const registrationAtDropRef = useRef<number | null>(null);
+  const previousGatewayMetricsRef = useRef<GatewayMetrics | null>(null);
+
+  const gatewayMetricFields = useMemo<MetricsPopupField[]>(() => {
+    if (!gatewayMetrics) return [];
+    return [
+      {
+        name: "healthy",
+        value: gatewayMetrics.healthy ? "true" : "false",
+        tone: gatewayMetrics.healthy ? "ok" : "warning",
+      },
+      {
+        name: "connected_clients",
+        value: String(gatewayMetrics.connected_clients),
+      },
+      { name: "active_rooms", value: String(gatewayMetrics.active_rooms) },
+      { name: "active_hosts", value: String(gatewayMetrics.active_hosts) },
+      {
+        name: "relayed_messages",
+        value: String(gatewayMetrics.relayed_messages),
+      },
+      {
+        name: "relayed_bytes",
+        value: formatBytes(gatewayMetrics.relayed_bytes),
+      },
+      {
+        name: "replay_failures",
+        value: `${gatewayMetrics.replay_failures} (${recentGatewayReplayFailures} recent)`,
+        tone: recentGatewayReplayFailures > 0 ? "warning" : undefined,
+      },
+      {
+        name: "dropped_frames",
+        value: `${gatewayMetrics.dropped_frames} (${recentGatewayDroppedFrames} recent)`,
+        tone: recentGatewayDroppedFrames > 0 ? "warning" : undefined,
+      },
+      {
+        name: "slow_client_disconnects",
+        value: String(gatewayMetrics.slow_client_disconnects),
+        tone:
+          gatewayMetrics.slow_client_disconnects > 0 ? "warning" : undefined,
+      },
+      {
+        name: "uptime_seconds",
+        value: formatUptime(gatewayMetrics.uptime_seconds),
+      },
+    ];
+  }, [gatewayMetrics, recentGatewayDroppedFrames, recentGatewayReplayFailures]);
+
+  const tunnelMetricFields = useMemo<MetricsPopupField[]>(() => {
+    if (!tunnelMetrics) return [];
+    const connected = tunnelMetrics.ha_connections > 0;
+    const recoveryRegistered =
+      registrationAtDropRef.current !== null &&
+      registrationAtDropRef.current !== tunnelMetrics.register_successes;
+
+    return [
+      {
+        name: "ha_connections",
+        value: connected ? "Connected" : "Disconnected",
+        tone: connected ? "ok" : "warning",
+      },
+      {
+        name: "tunnel_register_success",
+        value: connected
+          ? "Healthy"
+          : recoveryRegistered
+            ? "Reconnecting"
+            : "Recovery not confirmed",
+        tone: connected ? "ok" : "warning",
+      },
+      {
+        name: "request_errors",
+        value: `${tunnelMetrics.request_errors} (${recentTunnelErrors} recent)`,
+        tone: recentTunnelErrors > 0 ? "warning" : undefined,
+      },
+      {
+        name: "server_locations",
+        value: edgeLocationLabel(tunnelMetrics.edge_location),
+      },
+    ];
+  }, [recentTunnelErrors, tunnelMetrics]);
 
   // --- idle session actions ---
   const [sessionBusy, setSessionBusy] = useState(false);
@@ -390,6 +542,13 @@ function AppContent({ username }: AppContentProps) {
     setLanUrl(null);
     setPublicUrl(null);
     setProcessesRunning({ gateway: "Disabled", tunnel: "Disabled" });
+    setShowGatewayMetrics(false);
+    setShowTunnelMetrics(false);
+    setGatewayMetrics(null);
+    setGatewayMetricsError(null);
+    setRecentGatewayReplayFailures(0);
+    setRecentGatewayDroppedFrames(0);
+    previousGatewayMetricsRef.current = null;
     setSessionBusy(false);
   }, []);
 
@@ -502,6 +661,71 @@ function AppContent({ username }: AppContentProps) {
         }),
       );
       await register(
+        await listen<{
+          metrics: GatewayMetrics | null;
+          error: string | null;
+        }>("process://gateway-metrics", (event) => {
+          const { metrics, error } = event.payload;
+          if (!metrics) {
+            setGatewayMetrics(null);
+            setGatewayMetricsError(error ?? "Metrics server unavailable");
+            setRecentGatewayReplayFailures(0);
+            setRecentGatewayDroppedFrames(0);
+            previousGatewayMetricsRef.current = null;
+            return;
+          }
+
+          const previous = previousGatewayMetricsRef.current;
+          setRecentGatewayReplayFailures(
+            previous
+              ? Math.max(0, metrics.replay_failures - previous.replay_failures)
+              : 0,
+          );
+          setRecentGatewayDroppedFrames(
+            previous
+              ? Math.max(0, metrics.dropped_frames - previous.dropped_frames)
+              : 0,
+          );
+
+          previousGatewayMetricsRef.current = metrics;
+          setGatewayMetrics(metrics);
+          setGatewayMetricsError(null);
+        }),
+      );
+      await register(
+        await listen<{
+          metrics: TunnelMetrics | null;
+          error: string | null;
+        }>("process://tunnel-metrics", (event) => {
+          const { metrics, error } = event.payload;
+          if (!metrics) {
+            setTunnelMetrics(null);
+            setTunnelMetricsError(error ?? "Metrics server unavailable");
+            setRecentTunnelErrors(0);
+            previousTunnelMetricsRef.current = null;
+            registrationAtDropRef.current = null;
+            return;
+          }
+
+          const previous = previousTunnelMetricsRef.current;
+          setRecentTunnelErrors(
+            previous
+              ? Math.max(0, metrics.request_errors - previous.request_errors)
+              : 0,
+          );
+
+          if (metrics.ha_connections === 0) {
+            registrationAtDropRef.current ??= metrics.register_successes;
+          } else {
+            registrationAtDropRef.current = null;
+          }
+
+          previousTunnelMetricsRef.current = metrics;
+          setTunnelMetrics(metrics);
+          setTunnelMetricsError(null);
+        }),
+      );
+      await register(
         await listen("session://session-ended", () => {
           // Guests only: the gateway may echo end-session to the host too.
           handleRemoteSessionExit("ended", ["guest"]);
@@ -523,6 +747,27 @@ function AppContent({ username }: AppContentProps) {
       }
     };
   }, [handleRemoteSessionExit]);
+
+  useEffect(() => {
+    if (sessionStatus !== "host" || processesRunning.gateway !== "Enabled") {
+      setGatewayMetrics(null);
+      setGatewayMetricsError(null);
+      setRecentGatewayReplayFailures(0);
+      setRecentGatewayDroppedFrames(0);
+      previousGatewayMetricsRef.current = null;
+    }
+  }, [processesRunning.gateway, sessionStatus]);
+
+  useEffect(() => {
+    if (sessionStatus !== "host" || processesRunning.tunnel !== "Enabled") {
+      setTunnelMetrics(null);
+      setTunnelMetricsError(null);
+      setRecentTunnelErrors(0);
+      previousTunnelMetricsRef.current = null;
+      registrationAtDropRef.current = null;
+    }
+  }, [processesRunning.tunnel, sessionStatus]);
+
   // --- end session links ---
 
   useRemoteChangeListener({
@@ -597,6 +842,10 @@ function AppContent({ username }: AppContentProps) {
             forceMoveMarkers: false,
           },
         ]);
+        const primaryChange = changes[0];
+        if (primaryChange) {
+          editorInstance.setPosition(model.getPositionAt(primaryChange.offset));
+        }
         isApplyingRemote.current = false;
 
         const baseSeq = lastAppliedSeqRef.current;
@@ -703,7 +952,16 @@ function AppContent({ username }: AppContentProps) {
             processesRunning.tunnel === "Enabled") && (
             <span style={{ display: "flex", gap: 6 }}>
               {processesRunning.gateway === "Enabled" && (
-                <span
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sessionStatus === "host") setShowGatewayMetrics(true);
+                  }}
+                  title={
+                    sessionStatus === "host"
+                      ? "Show PeerCode gateway health"
+                      : undefined
+                  }
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -716,6 +974,7 @@ function AppContent({ username }: AppContentProps) {
                     fontSize: 11,
                     fontWeight: 600,
                     letterSpacing: "0.04em",
+                    cursor: sessionStatus === "host" ? "pointer" : "default",
                   }}
                 >
                   <span
@@ -729,10 +988,19 @@ function AppContent({ username }: AppContentProps) {
                     }}
                   />
                   gateway
-                </span>
+                </button>
               )}
               {processesRunning.tunnel === "Enabled" && (
-                <span
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sessionStatus === "host") setShowTunnelMetrics(true);
+                  }}
+                  title={
+                    sessionStatus === "host"
+                      ? "Show Cloudflare tunnel health"
+                      : undefined
+                  }
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -745,6 +1013,7 @@ function AppContent({ username }: AppContentProps) {
                     fontSize: 11,
                     fontWeight: 600,
                     letterSpacing: "0.04em",
+                    cursor: sessionStatus === "host" ? "pointer" : "default",
                   }}
                 >
                   <span
@@ -758,7 +1027,7 @@ function AppContent({ username }: AppContentProps) {
                     }}
                   />
                   tunnel
-                </span>
+                </button>
               )}
             </span>
           )}
@@ -972,6 +1241,25 @@ function AppContent({ username }: AppContentProps) {
           </button>
         )}
       </div>
+      {showGatewayMetrics && sessionStatus === "host" && (
+        <MetricsPopup
+          title="PeerCode gateway"
+          subtitle="Live relay and room health"
+          unavailable={gatewayMetricsError !== null}
+          fields={gatewayMetricFields}
+          onClose={() => setShowGatewayMetrics(false)}
+        />
+      )}
+      {showTunnelMetrics && sessionStatus === "host" && (
+        <MetricsPopup
+          title="Cloudflare tunnel"
+          subtitle="Live host connection health"
+          unavailable={tunnelMetricsError !== null}
+          fields={tunnelMetricFields}
+          note="Global peer count is not exposed by cloudflared. It must come from the PeerCode gateway, not tunnel metrics."
+          onClose={() => setShowTunnelMetrics(false)}
+        />
+      )}
       <div className="editor-container">
         <Editor
           height="100%"
