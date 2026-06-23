@@ -78,15 +78,15 @@ impl DeleteSet {
         }
     }
 
-    /// Remove every clock covered by `other`. Assumes both sets are compressed
+    /// Remove every clock covered by `holes`. Assumes both sets are compressed
     /// (sorted, disjoint), as the public API guarantees. Idempotent.
-    pub fn subtract(&mut self, other: &DeleteSet) {
-        for (client, holes) in &other.ranges {
+    pub fn subtract(&mut self, holes: &DeleteSet) {
+        for (client, client_holes) in &holes.ranges {
             let result: Vec<DeleteRange> = match self.ranges.get(client) {
                 Some(list) => {
                     let mut out = Vec::new();
                     for r in list {
-                        Self::subtract_holes_from_range(r, holes, &mut out);
+                        Self::subtract_holes_from_range(r, client_holes, &mut out);
                     }
                     out
                 }

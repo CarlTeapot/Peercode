@@ -120,6 +120,7 @@ fn encode_decode_snapshot_round_trips() {
             right: None,
             content: "hello".to_string(),
             is_deleted: false,
+            len: 5,
         }],
         state_vector: vec![(ClientId::new(42), 1)],
         delete_set: DeleteSet::new(),

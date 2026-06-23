@@ -53,8 +53,8 @@ pub enum DocOp {
     GetStateVector {
         reply: oneshot::Sender<StateVector>,
     },
-    GetDeleteSet {
-        reply: oneshot::Sender<DeleteSet>,
+    FetchGcData {
+        reply: oneshot::Sender<(StateVector, DeleteSet)>,
     },
     ApplyGcCommit {
         confirmed: DeleteSet,

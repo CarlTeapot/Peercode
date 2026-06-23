@@ -67,34 +67,16 @@ impl GcCoordinator {
     }
 
     fn handle_event(&mut self, event: GcEvent) {
-        match event {
-            GcEvent::PeerSvReport { client, sv } => {
-                let entry = self.peer_svs.entry(client).or_default();
-                merge_into(entry, &sv);
-            }
-            GcEvent::Joined(client) => {
-                self.peer_svs.entry(client).or_default();
-            }
-            GcEvent::Left(client) => {
-                self.peer_svs.remove(&client);
-            }
-        }
+        apply_event(&mut self.peer_svs, event);
     }
 
     async fn recompute(&mut self) {
         let doc_tx = self.app.state::<AppState>().doc_tx.clone();
 
-        let own_sv = match request(&doc_tx, |reply| DocOp::GetStateVector { reply }).await {
-            Ok(sv) => sv,
+        let (own_sv, own_ds) = match request(&doc_tx, |reply| DocOp::FetchGcData { reply }).await {
+            Ok(pair) => pair,
             Err(e) => {
-                warn!("gc coordinator: failed to read own state vector: {e}");
-                return;
-            }
-        };
-        let own_ds = match request(&doc_tx, |reply| DocOp::GetDeleteSet { reply }).await {
-            Ok(ds) => ds,
-            Err(e) => {
-                warn!("gc coordinator: failed to read own delete set: {e}");
+                warn!("gc coordinator: failed to read own state vector / delete set: {e}");
                 return;
             }
         };
@@ -105,13 +87,6 @@ impl GcCoordinator {
             return;
         }
 
-        self.app
-            .state::<WsState>()
-            .send_raw(encode_gc_commit(&confirmed))
-            .await;
-
-        // Applying locally prunes these ranges from our delete set, so the next
-        // recompute yields only newly-confirmed ranges (no re-emit bookkeeping).
         if let Err(e) = request_fallible(&doc_tx, |reply| DocOp::ApplyGcCommit {
             confirmed: confirmed.clone(),
             reply,
@@ -119,12 +94,34 @@ impl GcCoordinator {
         .await
         {
             warn!("gc coordinator: local gc-commit apply failed: {e}");
+            return;
         }
+
+        self.app
+            .state::<WsState>()
+            .send_raw(encode_gc_commit(&confirmed))
+            .await;
 
         debug!(
             "gc coordinator: emitted gc-commit covering {} range(s)",
             confirmed.iter().count()
         );
+    }
+}
+
+fn apply_event(peer_svs: &mut HashMap<ClientId, StateVector>, event: GcEvent) {
+    match event {
+        GcEvent::PeerSvReport { client, sv } => {
+            if let Some(entry) = peer_svs.get_mut(&client) {
+                merge_into(entry, &sv);
+            }
+        }
+        GcEvent::Joined(client) => {
+            peer_svs.entry(client).or_default();
+        }
+        GcEvent::Left(client) => {
+            peer_svs.remove(&client);
+        }
     }
 }
 
@@ -230,6 +227,56 @@ mod tests {
         let min = compute_min_sv(&peer_svs, &own);
         assert_eq!(min.get(&ClientId::new(1)), 5); // min(10,5,8)
         assert_eq!(min.get(&ClientId::new(2)), 0); // peer 8 absent -> 0
+    }
+
+    #[test]
+    fn stale_report_after_left_does_not_resurrect_peer() {
+        let peer = ClientId::new(7);
+        let mut peers = HashMap::new();
+        apply_event(&mut peers, GcEvent::Joined(peer));
+        apply_event(
+            &mut peers,
+            GcEvent::PeerSvReport {
+                client: peer,
+                sv: sv(&[(1, 5)]),
+            },
+        );
+        apply_event(&mut peers, GcEvent::Left(peer));
+        apply_event(
+            &mut peers,
+            GcEvent::PeerSvReport {
+                client: peer,
+                sv: sv(&[(1, 5)]),
+            },
+        );
+        assert!(
+            peers.is_empty(),
+            "a report delivered after `left` must not re-add the peer"
+        );
+    }
+
+    #[test]
+    fn reports_merge_per_client_max_into_joined_entry() {
+        let peer = ClientId::new(7);
+        let mut peers = HashMap::new();
+        apply_event(&mut peers, GcEvent::Joined(peer));
+        apply_event(
+            &mut peers,
+            GcEvent::PeerSvReport {
+                client: peer,
+                sv: sv(&[(1, 5)]),
+            },
+        );
+        apply_event(
+            &mut peers,
+            GcEvent::PeerSvReport {
+                client: peer,
+                sv: sv(&[(1, 3), (2, 4)]),
+            },
+        );
+        let entry = &peers[&peer];
+        assert_eq!(entry.get(&ClientId::new(1)), 5);
+        assert_eq!(entry.get(&ClientId::new(2)), 4);
     }
 
     #[test]

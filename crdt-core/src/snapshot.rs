@@ -5,7 +5,7 @@ use crate::store::DeleteSet;
 use crate::structs::Block;
 use crate::types::{BlockId, ClientId};
 
-pub const SNAPSHOT_VERSION: u8 = 1;
+pub const SNAPSHOT_VERSION: u8 = 2;
 
 #[derive(Debug, Clone, bitcode::Encode, bitcode::Decode)]
 pub struct SnapshotBlock {
@@ -16,6 +16,7 @@ pub struct SnapshotBlock {
     pub right: Option<BlockId>,
     pub content: String,
     pub is_deleted: bool,
+    pub len: u64,
 }
 
 impl From<&Block> for SnapshotBlock {
@@ -28,6 +29,7 @@ impl From<&Block> for SnapshotBlock {
             right: b.right(),
             content: b.content().to_string(),
             is_deleted: b.is_deleted,
+            len: b.len,
         }
     }
 }
@@ -42,6 +44,7 @@ impl From<SnapshotBlock> for Block {
             s.right,
             s.content,
             s.is_deleted,
+            s.len,
         )
     }
 }

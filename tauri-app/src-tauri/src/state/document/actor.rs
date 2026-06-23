@@ -111,8 +111,11 @@ impl DocActor {
             DocOp::GetStateVector { reply } => {
                 let _ = reply.send(self.state.doc.state_vector.clone());
             }
-            DocOp::GetDeleteSet { reply } => {
-                let _ = reply.send(self.state.doc.delete_set.clone());
+            DocOp::FetchGcData { reply } => {
+                let _ = reply.send((
+                    self.state.doc.state_vector.clone(),
+                    self.state.doc.delete_set.clone(),
+                ));
             }
             DocOp::ApplyGcCommit { confirmed, reply } => {
                 let result = gc::handle_apply_gc_commit(&mut self.state, &self.app, confirmed);

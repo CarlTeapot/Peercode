@@ -1054,6 +1054,42 @@ fn collect_garbage_erases_content_and_is_idempotent() {
 }
 
 #[test]
+fn snapshot_roundtrip_after_gc_preserves_erased_block_len() {
+    use crate::snapshot::Snapshot;
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap();
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+    doc.collect_garbage(&confirmed).unwrap();
+    assert_eq!(doc.get_text(), " world");
+
+    let snap = Snapshot::decode(&doc.to_snapshot().encode()).unwrap();
+    let mut joiner = Document::from_snapshot(snap);
+
+    assert_eq!(
+        joiner.get_text(),
+        " world",
+        "erased tombstone must not break traversal on a restored doc"
+    );
+    let blk = joiner.store.get(&block_id(1, 0)).unwrap();
+    assert_eq!(blk.len, 5, "clock span survives the round-trip");
+    assert!(blk.is_deleted && blk.is_empty());
+
+    let x = Block::new(
+        BlockId::new(ClientId::new(2), Clock::new(0)),
+        Some(block_id(1, 1)),
+        None,
+        "X".to_string(),
+    );
+    let changes = joiner.remote_insert(x).unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(joiner.get_text(), "X world");
+}
+
+#[test]
 fn remote_insert_with_origin_inside_erased_block_still_integrates() {
     // Regression: a delayed insert whose origin is inside a GC-erased block must
     // still integrate (the block stays id-resolvable, so pre_split re-splits it).
