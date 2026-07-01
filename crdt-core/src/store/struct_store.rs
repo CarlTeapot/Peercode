@@ -72,6 +72,17 @@ impl StructStore {
         }
     }
 
+    pub fn remove(&mut self, id: &BlockId) -> Option<Block> {
+        debug!("removing block {:?}", id);
+        let list = self.blocks.get_mut(&id.client)?;
+        let idx = Self::find_index(list, id.clock.value)?;
+        let block = list.remove(idx);
+        if list.is_empty() {
+            self.blocks.remove(&id.client);
+        }
+        Some(block)
+    }
+
     fn find_index(list: &[Block], clock: u64) -> Option<usize> {
         let result = list.partition_point(|b| b.id.clock.value <= clock);
         if result == 0 {

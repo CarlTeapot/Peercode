@@ -117,8 +117,8 @@ impl DocActor {
                     self.state.doc.delete_set.clone(),
                 ));
             }
-            DocOp::ApplyGcCommit { confirmed, reply } => {
-                let result = gc::handle_apply_gc_commit(&mut self.state, &self.app, confirmed);
+            DocOp::ApplyGcCommit { floor, reply } => {
+                let result = gc::handle_apply_gc_commit(&mut self.state, &self.app, floor);
                 let _ = reply.send(result);
             }
             #[cfg(debug_assertions)]

@@ -1,7 +1,7 @@
 use super::{
-    CONTROL_SESSION_ENDED, CONTROL_SNAPSHOT_REQUEST, OP_PREFIX, PREFIX_CONTROL, PREFIX_GC_COMMIT,
-    PREFIX_PRESENCE, PREFIX_SV_REPORT, PRESENCE_JOINED, PRESENCE_LEFT, PresenceEvent,
-    PresenceFrame, SNAPSHOT_PREFIX, encode_presence,
+    CONTROL_SESSION_ENDED, CONTROL_SNAPSHOT_REQUEST, MembershipEvent, MembershipFrame, OP_PREFIX,
+    PEER_JOINED, PEER_LEFT, PREFIX_CONTROL, PREFIX_GC_COMMIT, PREFIX_MEMBERSHIP, PREFIX_SV_REPORT,
+    SNAPSHOT_PREFIX, encode_membership,
 };
 use crate::types::ClientId;
 
@@ -15,10 +15,10 @@ fn prefix_constants_match_go_mirror() {
     const GO_CONTROL_SNAPSHOT_REQUEST: u8 = 0x02;
 
     const GO_PREFIX_GC_COMMIT: u8 = 0x04;
-    const GO_PREFIX_PRESENCE: u8 = 0x05;
+    const GO_PREFIX_MEMBERSHIP: u8 = 0x05;
     const GO_PREFIX_SV_REPORT: u8 = 0x06;
-    const GO_PRESENCE_JOINED: u8 = 0x01;
-    const GO_PRESENCE_LEFT: u8 = 0x02;
+    const GO_MEMBERSHIP_JOINED: u8 = 0x01;
+    const GO_MEMBERSHIP_LEFT: u8 = 0x02;
 
     assert_eq!(
         OP_PREFIX, GO_PREFIX_OP,
@@ -45,7 +45,7 @@ fn prefix_constants_match_go_mirror() {
         "PREFIX_GC_COMMIT drifted from gateway/internal/wire::PrefixGcCommit"
     );
     assert_eq!(
-        PREFIX_PRESENCE, GO_PREFIX_PRESENCE,
+        PREFIX_MEMBERSHIP, GO_PREFIX_MEMBERSHIP,
         "PREFIX_PRESENCE drifted from gateway/internal/wire::PrefixPresence"
     );
     assert_eq!(
@@ -53,27 +53,24 @@ fn prefix_constants_match_go_mirror() {
         "PREFIX_SV_REPORT drifted from gateway/internal/wire::PrefixSvReport"
     );
     assert_eq!(
-        PRESENCE_JOINED, GO_PRESENCE_JOINED,
-        "PRESENCE_JOINED drifted from gateway/internal/wire::PresenceJoined"
+        PEER_JOINED, GO_MEMBERSHIP_JOINED,
+        "MEMBERSHIP_JOINED drifted from gateway/internal/wire::MembershipJoined"
     );
     assert_eq!(
-        PRESENCE_LEFT, GO_PRESENCE_LEFT,
-        "PRESENCE_LEFT drifted from gateway/internal/wire::PresenceLeft"
+        PEER_LEFT, GO_MEMBERSHIP_LEFT,
+        "MEMBERSHIP_LEFT drifted from gateway/internal/wire::MembershipLeft"
     );
 }
 
 #[test]
 fn presence_layout_matches_go_mirror() {
-    // The gateway hand-assembles this exact byte layout in Go. If this expected
-    // vector changes, gateway/internal/wire::EncodePresenceFrame must change too
-    // (and its mirror test asserts the same bytes).
-    let frame = PresenceFrame {
+    let frame = MembershipFrame {
         client_id: ClientId::new(0x0102_0304_0506_0708),
-        event: PresenceEvent::Joined,
+        event: MembershipEvent::Joined,
     };
     let expected = vec![
-        PREFIX_PRESENCE,
-        PRESENCE_JOINED,
+        PREFIX_MEMBERSHIP,
+        PEER_JOINED,
         0x01,
         0x02,
         0x03,
@@ -84,8 +81,8 @@ fn presence_layout_matches_go_mirror() {
         0x08,
     ];
     assert_eq!(
-        encode_presence(&frame),
+        encode_membership(&frame),
         expected,
-        "presence frame layout drifted from gateway/internal/wire::EncodePresenceFrame"
+        "Membership frame layout drifted from gateway/internal/wire::EncodeMembershipFrame"
     );
 }

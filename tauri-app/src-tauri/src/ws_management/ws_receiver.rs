@@ -1,8 +1,8 @@
 use crdt_core::encode_snapshot;
 use crdt_core::store::StateVector;
 use crdt_core::wire::{
-    decode_presence, decode_sv_report, PresenceEvent, CONTROL_SESSION_ENDED,
-    CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL, PREFIX_PRESENCE, PREFIX_SV_REPORT,
+    decode_membership, decode_sv_report, MembershipEvent, CONTROL_SESSION_ENDED,
+    CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL, PREFIX_MEMBERSHIP, PREFIX_SV_REPORT,
 };
 use futures_util::StreamExt;
 use log::{debug, error, info, warn};
@@ -14,7 +14,6 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::state::appstate::AppState;
 use crate::state::document::client::request;
 use crate::state::document::types::DocOp;
-use crate::state::gc_coordinator::GcEvent;
 use crate::ws_management::ws_types::{DisconnectReason, Stream, WsConnection};
 
 pub async fn receive_loop(
@@ -47,7 +46,7 @@ pub async fn receive_loop(
                     }
                 },
                 // Host-only coordinator inputs (guests have no gc sender → no-op).
-                Some(PREFIX_PRESENCE) => route_presence(&app, &bytes).await,
+                Some(PREFIX_MEMBERSHIP) => route_membership(&app, &bytes).await,
                 Some(PREFIX_SV_REPORT) => route_sv_report(&app, &bytes).await,
                 _ => {
                     debug!("ws receiver binary message (bytes={})", bytes.len());
@@ -133,32 +132,34 @@ async fn handle_snapshot_request(
     }
 }
 
-/// Route a presence frame to the host coordinator (no-op off-host).
-async fn route_presence(app: &AppHandle, bytes: &[u8]) {
-    let Some(tx) = app.state::<AppState>().gc_event_sender() else {
-        return;
-    };
-    match decode_presence(bytes) {
-        Ok(frame) => {
-            let event = match frame.event {
-                PresenceEvent::Joined => GcEvent::Joined(frame.client_id),
-                PresenceEvent::Left => GcEvent::Left(frame.client_id),
-            };
-            let _ = tx.send(event).await;
-        }
-        Err(e) => warn!("ws recv: presence decode failed: {e}"),
+async fn route_membership(app: &AppHandle, bytes: &[u8]) {
+    match decode_membership(bytes) {
+        Ok(frame) => match frame.event {
+            MembershipEvent::Joined => {
+                app.state::<AppState>()
+                    .sync_maintenance
+                    .peer_joined(frame.client_id)
+                    .await;
+            }
+            MembershipEvent::Left => {
+                app.state::<AppState>()
+                    .sync_maintenance
+                    .peer_left(frame.client_id)
+                    .await;
+            }
+        },
+        Err(e) => warn!("ws recv: membership decode failed: {e}"),
     }
 }
 
-/// Route a peer sv-report to the host coordinator (no-op off-host).
 async fn route_sv_report(app: &AppHandle, bytes: &[u8]) {
-    let Some(tx) = app.state::<AppState>().gc_event_sender() else {
-        return;
-    };
     match decode_sv_report(bytes) {
         Ok((sender, entries)) => {
             let sv = StateVector::from_entries(entries);
-            let _ = tx.send(GcEvent::PeerSvReport { client: sender, sv }).await;
+            app.state::<AppState>()
+                .sync_maintenance
+                .peer_state_vector(sender, sv)
+                .await;
         }
         Err(e) => warn!("ws recv: sv-report decode failed: {e}"),
     }

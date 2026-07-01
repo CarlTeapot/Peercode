@@ -57,7 +57,7 @@ pub enum DocOp {
         reply: oneshot::Sender<(StateVector, DeleteSet)>,
     },
     ApplyGcCommit {
-        confirmed: DeleteSet,
+        floor: StateVector,
         reply: oneshot::Sender<Result<(), String>>,
     },
     #[cfg(debug_assertions)]

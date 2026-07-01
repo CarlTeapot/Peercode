@@ -114,7 +114,7 @@ impl WsState {
         Ok(disconnect_rx)
     }
 
-    pub async fn send_raw(&self, bytes: Vec<u8>) {
+    pub async fn send_raw(&self, bytes: Vec<u8>) -> Result<(), String> {
         let tx = {
             let guard = self.write_tx.read().unwrap();
             guard.as_ref().map(Arc::clone)
@@ -122,11 +122,17 @@ impl WsState {
         match tx {
             Some(tx) => {
                 if tx.send(Message::Binary(bytes.into())).await.is_err() {
-                    warn!("ws send_raw: writer channel closed; frame dropped");
+                    let msg = "ws send_raw: writer channel closed; frame dropped".to_string();
+                    warn!("{msg}");
+                    Err(msg)
+                } else {
+                    Ok(())
                 }
             }
             None => {
-                warn!("ws send_raw: no active connection; frame dropped");
+                let msg = "ws send_raw: no active connection; frame dropped".to_string();
+                warn!("{msg}");
+                Err(msg)
             }
         }
     }

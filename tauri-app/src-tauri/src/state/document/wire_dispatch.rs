@@ -1,7 +1,7 @@
-use crdt_core::store::DeleteSet;
+use crdt_core::store::StateVector;
+use crdt_core::wire::decode_gc_commit;
 use crdt_core::{
-    decode_gc_commit, decode_op, decode_snapshot, OpMessage, Snapshot, PREFIX_GC_COMMIT,
-    SNAPSHOT_PREFIX,
+    decode_op, decode_snapshot, OpMessage, Snapshot, PREFIX_GC_COMMIT, SNAPSHOT_PREFIX,
 };
 use log::{info, warn};
 use tauri::{AppHandle, Manager};
@@ -12,10 +12,9 @@ use crate::state::appstate::AppState;
 use crate::state::document::client::DocSender;
 use crate::state::document::types::DocOp;
 
-/// Buffered until the initial snapshot applies (guests only), in arrival order.
 enum PendingFrame {
     Op(OpMessage),
-    Gc(DeleteSet),
+    GcCommit(StateVector),
 }
 
 pub async fn process_loop(mut rx: UnboundedReceiver<Vec<u8>>, app: AppHandle) {
@@ -49,19 +48,22 @@ async fn dispatch_to_actor(
                 .map_err(|_| ())?;
             *snapshot_applied = true;
             flush_pending(doc_tx, pending).await?;
+            app.state::<AppState>()
+                .sync_maintenance
+                .mark_guest_snapshot_applied();
         }
         return Ok(());
     }
 
     if is_gc_commit_frame(bytes) {
-        let Some(confirmed) = decode_gc_commit_frame(bytes) else {
+        let Some(floor) = decode_gc_commit_frame(bytes) else {
             return Ok(());
         };
         if should_wait_for_snapshot(app, *snapshot_applied) {
-            pending.push(PendingFrame::Gc(confirmed));
+            pending.push(PendingFrame::GcCommit(floor));
             return Ok(());
         }
-        return apply_gc_commit(doc_tx, confirmed).await;
+        return apply_gc_commit(doc_tx, floor).await;
     }
 
     if let Some(op) = decode_op_frame(bytes) {
@@ -84,18 +86,17 @@ async fn flush_pending(doc_tx: &DocSender, pending: &mut Vec<PendingFrame>) -> R
                 .send(DocOp::ApplyRemoteOp { op })
                 .await
                 .map_err(|_| ())?,
-            PendingFrame::Gc(confirmed) => apply_gc_commit(doc_tx, confirmed).await?,
+            PendingFrame::GcCommit(floor) => apply_gc_commit(doc_tx, floor).await?,
         }
     }
     Ok(())
 }
 
-/// Fire-and-forget; the reply is unused (the handler emits any UI changes itself).
-async fn apply_gc_commit(doc_tx: &DocSender, confirmed: DeleteSet) -> Result<(), ()> {
+async fn apply_gc_commit(doc_tx: &DocSender, floor: StateVector) -> Result<(), ()> {
     let (reply_tx, _reply_rx) = oneshot::channel();
     doc_tx
         .send(DocOp::ApplyGcCommit {
-            confirmed,
+            floor,
             reply: reply_tx,
         })
         .await
@@ -124,9 +125,9 @@ fn decode_snapshot_frame(bytes: &[u8]) -> Option<Snapshot> {
     }
 }
 
-fn decode_gc_commit_frame(bytes: &[u8]) -> Option<DeleteSet> {
+fn decode_gc_commit_frame(bytes: &[u8]) -> Option<StateVector> {
     match decode_gc_commit(bytes) {
-        Ok(ds) => Some(ds),
+        Ok(floor) => Some(floor),
         Err(e) => {
             warn!("ws recv: gc-commit decode failed: {e}");
             None

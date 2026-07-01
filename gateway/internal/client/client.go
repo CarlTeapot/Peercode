@@ -16,6 +16,7 @@ type Client struct {
 	conn   *websocket.Conn
 	send   chan []byte
 	closed atomic.Bool
+	host   atomic.Bool
 }
 
 func New(id, roomID string, conn *websocket.Conn) *Client {
@@ -32,6 +33,18 @@ func New(id, roomID string, conn *websocket.Conn) *Client {
 func (c *Client) CloseSend() {
 	slog.Info("closing client send channel", "room_id", c.RoomID, "client_id", c.ID)
 	close(c.send)
+}
+
+func (c *Client) MarkHost() {
+	c.host.Store(true)
+}
+
+func (c *Client) ClearHost() {
+	c.host.Store(false)
+}
+
+func (c *Client) IsHost() bool {
+	return c != nil && c.host.Load()
 }
 
 // returns false without blocking if the send buffer is full

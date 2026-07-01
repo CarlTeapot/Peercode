@@ -70,12 +70,13 @@ func (r *Room) Join(c *client.Client) error {
 	isHost := false
 	if r.host == nil {
 		r.host = c
+		c.MarkHost()
 		isHost = true
 		slog.Info("host client registered", "room_id", r.ID, "client_id", c.ID)
 	}
 	r.metrics.ClientJoined(isHost)
 	// Notify existing members (incl. the host) that c joined.
-	r.broadcastPresenceLocked(c.ID, wire.PresenceJoined, c)
+	r.broadcastMembershipLocked(c.ID, wire.MembershipJoined, c)
 	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "size", len(r.clients))
 	return nil
 }
@@ -91,11 +92,12 @@ func (r *Room) Leave(c *client.Client, onEmpty func()) {
 	wasHost := r.host == c
 	if wasHost {
 		r.host = nil
+		c.ClearHost()
 	}
 	r.metrics.ClientLeft(wasHost)
 	c.CloseSend()
 	// Notify remaining members that c left (c is already removed).
-	r.broadcastPresenceLocked(c.ID, wire.PresenceLeft, nil)
+	r.broadcastMembershipLocked(c.ID, wire.MembershipLeft, nil)
 	empty := len(r.clients) == 0
 	if empty {
 		r.closed = true
@@ -181,6 +183,16 @@ func (r *Room) Run() {
 }
 
 func (r *Room) broadcast(msg BroadcastMsg) {
+	if wire.IsGcCommitFrame(msg.Data) && !msg.Sender.IsHost() {
+		slog.Warn(
+			"gc-commit dropped from non-host sender",
+			"room_id", r.ID,
+			"client_id", msg.Sender.ID,
+			"bytes", len(msg.Data),
+		)
+		return
+	}
+
 	targets := r.getPeers(msg.Sender)
 
 	slog.Debug(
@@ -229,22 +241,22 @@ func (r *Room) BroadcastAll(data []byte) {
 	r.sendToPeers(targets, data, "slow client during BroadcastAll; force-closing")
 }
 
-// broadcastPresenceLocked sends a presence frame for subjectID to all clients
+// broadcastMembershipLocked sends a membership frame for subjectID to all clients
 // except `exclude`. Must hold r.mu (Send is a non-blocking push, no re-lock); a
 // non-numeric subjectID is skipped rather than failing the join/leave.
-func (r *Room) broadcastPresenceLocked(subjectID string, event byte, exclude *client.Client) {
+func (r *Room) broadcastMembershipLocked(subjectID string, event byte, exclude *client.Client) {
 	id, err := strconv.ParseUint(subjectID, 10, 64)
 	if err != nil {
-		slog.Warn("presence: non-numeric client_id; skipping presence", "room_id", r.ID, "client_id", subjectID, "error", err)
+		slog.Warn("membership: non-numeric client_id; skipping membership", "room_id", r.ID, "client_id", subjectID, "error", err)
 		return
 	}
-	frame := wire.EncodePresenceFrame(id, event)
+	frame := wire.EncodeMembershipFrame(id, event)
 	for cl := range r.clients {
 		if cl == exclude {
 			continue
 		}
 		if !cl.Send(frame) {
-			slog.Warn("presence: send failed (slow client); force-closing", "room_id", r.ID, "client_id", cl.ID)
+			slog.Warn("membership: send failed (slow client); force-closing", "room_id", r.ID, "client_id", cl.ID)
 			cl.ForceClose()
 		}
 	}

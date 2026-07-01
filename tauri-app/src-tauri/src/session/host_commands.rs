@@ -36,9 +36,9 @@ pub async fn host_session(app: AppHandle) -> Result<(), String> {
         setup.public_room_url.clone(),
     )?;
 
-    // Start the host-only GC coordinator now that the WS is up and role is Host.
-    let gc_tx = crate::state::gc_coordinator::GcCoordinator::spawn(app.clone());
-    app.state::<AppState>().set_gc_event_sender(Some(gc_tx));
+    app.state::<AppState>()
+        .sync_maintenance
+        .start_host_gc(app.clone());
 
     emit_session_ready(&app, &setup)?;
     info!(

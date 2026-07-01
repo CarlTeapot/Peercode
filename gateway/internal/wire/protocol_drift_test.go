@@ -14,11 +14,11 @@ func TestPrefixConstantsMatchRustSource(t *testing.T) {
 		rustControlSessionEnded    byte = 0x01
 		rustControlSnapshotRequest byte = 0x02
 
-		rustPrefixGcCommit byte = 0x04
-		rustPrefixPresence byte = 0x05
-		rustPrefixSvReport byte = 0x06
-		rustPresenceJoined byte = 0x01
-		rustPresenceLeft   byte = 0x02
+		rustPrefixGcCommit   byte = 0x04
+		rustPrefixMembership byte = 0x05
+		rustPrefixSvReport   byte = 0x06
+		rustMembershipJoined byte = 0x01
+		rustMembershipLeft   byte = 0x02
 	)
 
 	if PrefixOp != rustOpPrefix {
@@ -39,26 +39,26 @@ func TestPrefixConstantsMatchRustSource(t *testing.T) {
 	if PrefixGcCommit != rustPrefixGcCommit {
 		t.Fatalf("PrefixGcCommit = %#x, rust PREFIX_GC_COMMIT = %#x — protocol drift", PrefixGcCommit, rustPrefixGcCommit)
 	}
-	if PrefixPresence != rustPrefixPresence {
-		t.Fatalf("PrefixPresence = %#x, rust PREFIX_PRESENCE = %#x — protocol drift", PrefixPresence, rustPrefixPresence)
+	if PrefixMembership != rustPrefixMembership {
+		t.Fatalf("PrefixMembership = %#x, rust PREFIX_MEMBERSHIP = %#x — protocol drift", PrefixMembership, rustPrefixMembership)
 	}
 	if PrefixSvReport != rustPrefixSvReport {
 		t.Fatalf("PrefixSvReport = %#x, rust PREFIX_SV_REPORT = %#x — protocol drift", PrefixSvReport, rustPrefixSvReport)
 	}
-	if PresenceJoined != rustPresenceJoined {
-		t.Fatalf("PresenceJoined = %#x, rust PRESENCE_JOINED = %#x — protocol drift", PresenceJoined, rustPresenceJoined)
+	if MembershipJoined != rustMembershipJoined {
+		t.Fatalf("MembershipJoined = %#x, rust PEER_JOINED = %#x — protocol drift", MembershipJoined, rustMembershipJoined)
 	}
-	if PresenceLeft != rustPresenceLeft {
-		t.Fatalf("PresenceLeft = %#x, rust PRESENCE_LEFT = %#x — protocol drift", PresenceLeft, rustPresenceLeft)
+	if MembershipLeft != rustMembershipLeft {
+		t.Fatalf("MembershipLeft = %#x, rust PEER_LEFT = %#x — protocol drift", MembershipLeft, rustMembershipLeft)
 	}
 }
 
-func TestPresenceLayoutMatchesRustSource(t *testing.T) {
-	// Must equal crdt-core/src/wire encode_presence for the same inputs; the Rust
+func TestMembershipLayoutMatchesRustSource(t *testing.T) {
+	// Must equal crdt-core/src/wire encode_membership for the same inputs; the Rust
 	// drift test pins the identical expected bytes.
-	got := EncodePresenceFrame(0x0102030405060708, PresenceJoined)
-	want := []byte{PrefixPresence, PresenceJoined, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	got := EncodeMembershipFrame(0x0102030405060708, MembershipJoined)
+	want := []byte{PrefixMembership, MembershipJoined, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 	if !bytes.Equal(got, want) {
-		t.Fatalf("EncodePresenceFrame layout = %x, want %x — protocol drift", got, want)
+		t.Fatalf("EncodeMembershipFrame layout = %x, want %x — protocol drift", got, want)
 	}
 }

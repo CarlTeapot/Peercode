@@ -1,5 +1,6 @@
 mod app_config;
 mod debug;
+mod garbage_collection;
 mod gateway;
 mod persistence;
 mod processes;

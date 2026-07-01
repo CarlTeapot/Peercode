@@ -85,10 +85,10 @@ func TestValidateFrame_AcceptsGcCommitAndSvReport(t *testing.T) {
 	}
 }
 
-func TestValidateFrame_RejectsInboundPresence(t *testing.T) {
-	// Presence is gateway-authored only; a client must not be able to inject one.
-	if err := ValidateFrame([]byte{PrefixPresence, PresenceJoined}); !errors.Is(err, ErrUnknownPrefix) {
-		t.Fatalf("ValidateFrame(presence) = %v, want ErrUnknownPrefix", err)
+func TestValidateFrame_RejectsInboundMembership(t *testing.T) {
+	// Membership is gateway-authored only; a client must not be able to inject one.
+	if err := ValidateFrame([]byte{PrefixMembership, MembershipJoined}); !errors.Is(err, ErrUnknownPrefix) {
+		t.Fatalf("ValidateFrame(membership) = %v, want ErrUnknownPrefix", err)
 	}
 }
 

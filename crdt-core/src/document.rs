@@ -56,11 +56,26 @@ impl Document {
         pending_blocks: Vec<Block>,
         pending_delete_sets: Vec<DeleteSet>,
     ) -> Self {
-        let mut position_index = PositionIndex::new();
+        let mut doc = Document {
+            client_id,
+            store,
+            state_vector,
+            delete_set,
+            seen_delete_set,
+            head,
+            position_index: PositionIndex::new(),
+            pending_blocks,
+            pending_delete_sets,
+        };
+        doc.rebuild_position_index_from_links();
+        doc
+    }
+
+    pub(super) fn rebuild_position_index_from_links(&mut self) {
         let mut entries: Vec<(BlockId, u64, bool)> = Vec::new();
-        let mut curr = head;
+        let mut curr = self.head;
         while let Some(id) = curr {
-            match store.get(&id) {
+            match self.store.get(&id) {
                 Some(block) => {
                     entries.push((id, block.len, block.is_deleted));
                     curr = block.right();
@@ -68,19 +83,38 @@ impl Document {
                 None => break,
             }
         }
-        position_index.rebuild_from_order(entries.into_iter());
+        self.position_index.rebuild_from_order(entries.into_iter());
+    }
 
-        Document {
-            client_id,
-            store,
-            state_vector,
-            delete_set,
-            seen_delete_set,
-            head,
-            position_index,
-            pending_blocks,
-            pending_delete_sets,
+    pub(super) fn unlink_block(&mut self, id: BlockId) -> bool {
+        let Some(block) = self.store.get(&id).cloned() else {
+            return false;
+        };
+        let left = block.left();
+        let right = block.right();
+
+        if let Some(left_id) = left {
+            if let Some(left_block) = self.store.get_mut(&left_id) {
+                left_block.set_right(right);
+            }
+        } else {
+            self.head = right;
         }
+
+        if let Some(right_id) = right
+            && let Some(right_block) = self.store.get_mut(&right_id)
+        {
+            right_block.set_left(left);
+        }
+
+        self.store.remove(&id).is_some()
+    }
+}
+
+#[cfg(test)]
+impl Document {
+    fn pending_delete_set_count(&self) -> usize {
+        self.pending_delete_sets.len()
     }
 }
 

@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	PrefixOp       byte = 0x00
-	PrefixSnapshot byte = 0x01
-	PrefixControl  byte = 0x02
-	PrefixGcCommit byte = 0x04
-	PrefixPresence byte = 0x05
-	PrefixSvReport byte = 0x06
+	PrefixOp         byte = 0x00
+	PrefixSnapshot   byte = 0x01
+	PrefixControl    byte = 0x02
+	PrefixGcCommit   byte = 0x04
+	PrefixMembership byte = 0x05
+	PrefixSvReport   byte = 0x06
 )
 
 const (
@@ -21,19 +21,17 @@ const (
 )
 
 const (
-	PresenceJoined byte = 0x01
-	PresenceLeft   byte = 0x02
+	MembershipJoined byte = 0x01
+	MembershipLeft   byte = 0x02
 )
 
 func EncodeControlFrame(controlType byte) []byte {
 	return []byte{PrefixControl, controlType}
 }
 
-// EncodePresenceFrame builds the fixed 10-byte layout
-// [PrefixPresence][event][clientID uint64 BE], pinned by the protocol-drift tests.
-func EncodePresenceFrame(clientID uint64, event byte) []byte {
+func EncodeMembershipFrame(clientID uint64, event byte) []byte {
 	out := make([]byte, 10)
-	out[0] = PrefixPresence
+	out[0] = PrefixMembership
 	out[1] = event
 	binary.BigEndian.PutUint64(out[2:], clientID)
 	return out
@@ -49,7 +47,7 @@ func ValidateFrame(frame []byte) error {
 		return ErrEmptyFrame
 	}
 	switch frame[0] {
-	// PrefixPresence is gateway-authored only; an inbound one is rejected.
+	// PrefixMembership is gateway-authored only; an inbound one is rejected.
 	case PrefixOp, PrefixSnapshot, PrefixGcCommit, PrefixSvReport:
 		return nil
 	default:
@@ -73,6 +71,10 @@ func DecodeOpFrame(frame []byte) ([]byte, error) {
 
 func IsSnapshotFrame(frame []byte) bool {
 	return len(frame) > 0 && frame[0] == PrefixSnapshot
+}
+
+func IsGcCommitFrame(frame []byte) bool {
+	return len(frame) > 0 && frame[0] == PrefixGcCommit
 }
 
 func EncodeOpFrame(payload []byte) []byte {

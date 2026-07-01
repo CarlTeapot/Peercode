@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::DeleteSet;
+use crate::store::{DeleteSet, StateVector};
 use crate::structs::Block;
 use crate::types::{BlockId, ClientId, Clock};
 
@@ -154,13 +154,11 @@ fn decode_snapshot_rejects_empty_frame() {
 
 #[test]
 fn encode_decode_gc_commit_round_trips() {
-    let mut ds = DeleteSet::new();
-    ds.add(bid(1, 0), 3);
-    ds.add(bid(2, 5), 2);
-    let frame = encode_gc_commit(&ds);
+    let floor = StateVector::from_entries(vec![(ClientId::new(1), 3), (ClientId::new(2), 7)]);
+    let frame = encode_gc_commit(&floor);
     assert_eq!(frame[0], PREFIX_GC_COMMIT);
     let decoded = decode_gc_commit(&frame).expect("decode");
-    assert_eq!(decoded, ds);
+    assert_eq!(decoded, floor);
 }
 
 #[test]
@@ -203,42 +201,42 @@ fn decode_sv_report_rejects_snapshot_prefix() {
 }
 
 #[test]
-fn presence_round_trips_joined_and_left() {
-    for event in [PresenceEvent::Joined, PresenceEvent::Left] {
-        let frame = PresenceFrame {
+fn membership_round_trips_joined_and_left() {
+    for event in [MembershipEvent::Joined, MembershipEvent::Left] {
+        let frame = MembershipFrame {
             client_id: ClientId::new(0x0102_0304_0506_0708),
             event,
         };
-        let bytes = encode_presence(&frame);
+        let bytes = encode_membership(&frame);
         assert_eq!(bytes.len(), 10);
-        assert_eq!(bytes[0], PREFIX_PRESENCE);
-        assert_eq!(decode_presence(&bytes).expect("decode"), frame);
+        assert_eq!(bytes[0], PREFIX_MEMBERSHIP);
+        assert_eq!(decode_membership(&bytes).expect("decode"), frame);
     }
 }
 
 #[test]
-fn decode_presence_rejects_wrong_prefix() {
-    let frame = vec![OP_PREFIX, PRESENCE_JOINED, 0, 0, 0, 0, 0, 0, 0, 0];
+fn decode_membership_rejects_wrong_prefix() {
+    let frame = vec![OP_PREFIX, PEER_JOINED, 0, 0, 0, 0, 0, 0, 0, 0];
     assert!(matches!(
-        decode_presence(&frame),
-        Err(WireError::NotAPresence)
+        decode_membership(&frame),
+        Err(WireError::NotAMember)
     ));
 }
 
 #[test]
-fn decode_presence_rejects_bad_length() {
-    let frame = vec![PREFIX_PRESENCE, PRESENCE_JOINED, 0, 0];
+fn decode_membership_rejects_bad_length() {
+    let frame = vec![PREFIX_MEMBERSHIP, PEER_JOINED, 0, 0];
     assert!(matches!(
-        decode_presence(&frame),
-        Err(WireError::MalformedPresence)
+        decode_membership(&frame),
+        Err(WireError::MalformedMembership)
     ));
 }
 
 #[test]
-fn decode_presence_rejects_unknown_event() {
-    let frame = vec![PREFIX_PRESENCE, 0xEE, 0, 0, 0, 0, 0, 0, 0, 1];
+fn decode_membership_rejects_unknown_event() {
+    let frame = vec![PREFIX_MEMBERSHIP, 0xEE, 0, 0, 0, 0, 0, 0, 0, 1];
     assert!(matches!(
-        decode_presence(&frame),
-        Err(WireError::MalformedPresence)
+        decode_membership(&frame),
+        Err(WireError::MalformedMembership)
     ));
 }
