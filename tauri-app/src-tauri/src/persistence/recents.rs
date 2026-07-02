@@ -16,7 +16,6 @@ fn recents_path(app: &AppHandle) -> Result<PathBuf, PersistError> {
     Ok(base.join(RECENTS_FILE))
 }
 
-
 /// Recently used paths, most recent first.
 pub fn read_recents(app: &AppHandle) -> Vec<PathBuf> {
     let Ok(path) = recents_path(app) else {
@@ -52,4 +51,3 @@ fn push_front_dedup(mut recents: Vec<PathBuf>, entry: PathBuf) -> Vec<PathBuf> {
     recents.truncate(MAX_RECENTS);
     recents
 }
-
