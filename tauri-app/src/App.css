@@ -78,6 +78,11 @@ body {
   margin-right: 8px;
 }
 
+.entry-wire {
+  color: #555;
+  margin-left: 12px;
+}
+
 .op-insert {
   color: #7ec8a0;
 }
@@ -301,4 +306,342 @@ body {
   color: #f77;
   font-size: 11px;
   border-top: 1px solid #333;
+}
+
+.file-menu {
+  position: relative;
+}
+
+.file-dropdown-doc-path {
+  font-size: 10px;
+  color: #557;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.file-dropdown-doc-badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #2a2a4a;
+  color: #9ad;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.file-dropdown-doc-reveal {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  line-height: 1;
+}
+
+.file-dropdown-doc-reveal:hover {
+  color: #9ad;
+}
+
+/* ── Toolbar extras ────────────────────────────────────── */
+
+.toolbar-username {
+  color: #7ab;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 2px 8px;
+  background: #1a2a3a;
+  border-radius: 3px;
+}
+
+.crdt-log-btn {
+  background: #555;
+  border: none;
+  color: white;
+  padding: 2px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.crdt-log-btn.on {
+  background: #4a9;
+}
+
+/* ── Modals ────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-card {
+  background: #1e1e2e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 28px 32px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #ccc;
+  font-family: monospace;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #eee;
+}
+
+.modal-text {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.modal-input {
+  background: #12121f;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #eee;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: #4a7fd4;
+}
+
+.modal-error {
+  color: #f77;
+  font-size: 12px;
+  min-height: 16px;
+}
+
+.modal-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.modal-btn {
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 7px 0;
+  width: 100%;
+  background: #4a7fd4;
+  color: #fff;
+}
+
+.modal-btn:disabled {
+  background: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.modal-btn.danger {
+  background: #7a3a2a;
+}
+
+.modal-btn.neutral {
+  background: #444;
+}
+
+/* ── Session panel ─────────────────────────────────────── */
+
+.session-panel {
+  padding: 8px;
+  background: #1a1a2e;
+  border-bottom: 1px solid #333;
+  font-family: monospace;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.session-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-label {
+  color: #aaa;
+}
+
+.session-status-value {
+  color: #0f0;
+}
+
+.session-status-value.error {
+  color: #f55;
+}
+
+.session-chips {
+  display: flex;
+  gap: 6px;
+}
+
+.session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: default;
+}
+
+.session-chip.clickable {
+  cursor: pointer;
+}
+
+.session-chip.gateway {
+  background: #0d2a1a;
+  border: 1px solid #2ecc71;
+  color: #2ecc71;
+}
+
+.session-chip.tunnel {
+  background: #0d1e2a;
+  border: 1px solid #3498db;
+  color: #3498db;
+}
+
+.session-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.session-chip.gateway .session-chip-dot {
+  background: #2ecc71;
+  box-shadow: 0 0 5px #2ecc71;
+}
+
+.session-chip.tunnel .session-chip-dot {
+  background: #3498db;
+  box-shadow: 0 0 5px #3498db;
+}
+
+.session-url-row {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.session-url {
+  color: #0ff;
+}
+
+.session-copy-btn {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid #555;
+  background: #2c2c3d;
+  color: #ddd;
+  cursor: pointer;
+}
+
+.session-copy-status {
+  color: #9ad;
+  margin-top: 4px;
+}
+
+.session-starting-note {
+  color: #888;
+  margin-left: 8px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.session-btn {
+  font-size: 12px;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 5px 16px;
+  border-radius: 5px;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all 0.15s;
+}
+
+.session-btn:disabled {
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.session-btn.host {
+  background: linear-gradient(135deg, #2ecc71, #27ae60);
+  box-shadow: 0 2px 8px rgba(46, 204, 113, 0.3);
+}
+
+.session-btn.host:disabled {
+  background: #2a4a3a;
+  color: #6a9a7a;
+}
+
+.session-btn.join {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.session-btn.end {
+  margin-top: 8px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+}
+
+.session-btn.end:disabled {
+  background: #5a2a2a;
+  color: #c08080;
+}
+
+.session-btn.kill {
+  margin-top: 8px;
+  background: linear-gradient(135deg, #e67e22, #d35400);
+  box-shadow: 0 2px 8px rgba(230, 126, 34, 0.35);
+}
+
+.session-notice {
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.session-notice.ended {
+  background: #2a1a0a;
+  border: 1px solid #e67e22;
+  color: #e67e22;
+}
+
+.session-notice.disconnected {
+  background: #2a0a0a;
+  border: 1px solid #e74c3c;
+  color: #e74c3c;
 }
