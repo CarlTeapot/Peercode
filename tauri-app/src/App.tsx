@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
+import { normalizeToLF, forceModelLF } from "./eol";
 import {
   UsernameGate,
   overlayStyle,
@@ -267,7 +268,9 @@ function installPlainTextPasteHandler(
     event.preventDefault();
     event.stopPropagation();
 
-    const text = event.clipboardData?.getData("text/plain") ?? "";
+    const text = normalizeToLF(
+      event.clipboardData?.getData("text/plain") ?? "",
+    );
 
     if (text) {
       editorInstance.focus();
@@ -278,7 +281,9 @@ function installPlainTextPasteHandler(
     void navigator.clipboard.readText().then((clipText) => {
       if (!clipText) return;
       editorInstance.focus();
-      editorInstance.trigger("plain-text-paste", "type", { text: clipText });
+      editorInstance.trigger("plain-text-paste", "type", {
+        text: normalizeToLF(clipText),
+      });
     });
   };
 
@@ -313,6 +318,7 @@ function AppContent({ username }: AppContentProps) {
     if (ed) {
       isApplyingRemote.current = true;
       ed.setValue(text);
+      forceModelLF(ed, monacoRef.current);
       isApplyingRemote.current = false;
       shadowTextRef.current = text;
     }
@@ -462,7 +468,11 @@ function AppContent({ username }: AppContentProps) {
   const resetDocAndEditor = useCallback(async () => {
     await invoke("reset_document");
     isApplyingRemote.current = true;
-    editorRef.current?.setValue("");
+    const ed = editorRef.current;
+    if (ed) {
+      ed.setValue("");
+      forceModelLF(ed, monacoRef.current);
+    }
     isApplyingRemote.current = false;
     shadowTextRef.current = "";
   }, []);
@@ -803,9 +813,7 @@ function AppContent({ username }: AppContentProps) {
     // Force LF on all platforms. Without this, Windows/WebView2 defaults to
     // CRLF which makes every newline 2 bytes in the model, shifting all offsets
     // relative to Linux/macOS peers and causing divergence.
-    editorInstance
-      .getModel()
-      ?.setEOL(monacoInstance.editor.EndOfLineSequence.LF);
+    forceModelLF(editorInstance, monacoInstance);
 
     installPlainTextPasteHandler(editorInstance);
     setStatus("editor ready");
@@ -823,7 +831,7 @@ function AppContent({ username }: AppContentProps) {
         const changes = event.changes.map((c) => ({
           offset: c.rangeOffset,
           deleteLen: c.rangeLength,
-          text: c.text,
+          text: normalizeToLF(c.text),
         }));
 
         // Revert Monaco to the shadow text — the backend will emit events
