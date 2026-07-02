@@ -67,6 +67,10 @@ pub fn run() {
                 debug!("debug linked-list logger spawned");
             }
 
+            if let Err(e) = persistence::migrate_legacy_documents(app.handle()) {
+                warn!("legacy document migration failed: {e}");
+            }
+
             info!("tauri setup completed");
             Ok(())
         })
@@ -116,8 +120,13 @@ pub fn run() {
             identity::get_identity,
             identity::set_username,
             persistence::commands::save_document,
+            persistence::commands::save_document_to_path,
+            persistence::commands::save_current_document,
             persistence::commands::load_document,
+            persistence::commands::load_document_from_path,
             persistence::commands::list_saved_documents,
+            persistence::commands::get_documents_dir,
+            persistence::commands::get_current_document_path,
             persistence::commands::fork_document,
             persistence::commands::delete_document,
             persistence::commands::get_document_text,

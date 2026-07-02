@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::persistence;
 use crate::state::appstate::AppState;
@@ -8,6 +9,30 @@ use crdt_core::Document;
 use rand::random;
 use tauri::{AppHandle, State};
 
+use super::FILE_EXTENSION;
+
+fn set_current_file(state: &AppState, name: Option<String>, path: Option<PathBuf>) {
+    *state.current_document_name.lock().unwrap() = name;
+    *state.current_document_path.lock().unwrap() = path;
+}
+
+fn name_from_path(path: &Path) -> String {
+    path.file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "document".to_string())
+}
+
+fn ensure_pcdoc_extension(path: PathBuf) -> PathBuf {
+    if path.extension().and_then(|e| e.to_str()) == Some(FILE_EXTENSION) {
+        path
+    } else {
+        let mut s = path.into_os_string();
+        s.push(".");
+        s.push(FILE_EXTENSION);
+        PathBuf::from(s)
+    }
+}
+
 #[tauri::command]
 pub async fn save_document(
     app: AppHandle,
@@ -16,7 +41,8 @@ pub async fn save_document(
 ) -> Result<(), String> {
     let snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
     persistence::save_snapshot_named(&app, &name, &snapshot).map_err(|e| e.to_string())?;
-    *state.current_document_name.lock().unwrap() = Some(name);
+    let path = persistence::doc_path(&app, &name).map_err(|e| e.to_string())?;
+    set_current_file(&state, Some(name), Some(path));
     Ok(())
 }
 
@@ -36,6 +62,38 @@ fn rebuild_if_crlf(doc: Document) -> Result<(Document, String), String> {
 }
 
 #[tauri::command]
+pub async fn save_document_to_path(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let path = ensure_pcdoc_extension(PathBuf::from(path));
+    let snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
+    persistence::save_snapshot(&path, &snapshot).map_err(|e| e.to_string())?;
+    persistence::record_recent(&app, &path).map_err(|e| e.to_string())?;
+    set_current_file(&state, Some(name_from_path(&path)), Some(path));
+    Ok(())
+}
+
+/// Re-save the current document wherever it lives (library or external).
+#[tauri::command]
+pub async fn save_current_document(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let path = state.current_document_path.lock().unwrap().clone();
+    let name = state.current_document_name.lock().unwrap().clone();
+    let snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
+    match (path, name) {
+        (Some(path), _) => persistence::save_snapshot(&path, &snapshot).map_err(|e| e.to_string()),
+        (None, Some(name)) => {
+            persistence::save_snapshot_named(&app, &name, &snapshot).map_err(|e| e.to_string())
+        }
+        (None, None) => Err("no current document; use Save as".to_string()),
+    }
+}
+
+#[tauri::command]
 pub async fn load_document(
     app: AppHandle,
     name: String,
@@ -49,7 +107,29 @@ pub async fn load_document(
         reply,
     })
     .await?;
-    *state.current_document_name.lock().unwrap() = Some(name);
+    let path = persistence::doc_path(&app, &name).map_err(|e| e.to_string())?;
+    set_current_file(&state, Some(name), Some(path));
+
+    Ok(text)
+}
+
+#[tauri::command]
+pub async fn load_document_from_path(
+    app: AppHandle,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let path = PathBuf::from(path);
+    let loaded = persistence::load_document(&path).map_err(|e| e.to_string())?;
+    let text = loaded.get_text();
+
+    request(&state.doc_tx, |reply| DocOp::DocumentReplace {
+        doc: Box::new(loaded),
+        reply,
+    })
+    .await?;
+    persistence::record_recent(&app, &path).map_err(|e| e.to_string())?;
+    set_current_file(&state, Some(name_from_path(&path)), Some(path));
 
     Ok(text)
 }
@@ -60,17 +140,23 @@ pub fn list_saved_documents(app: AppHandle) -> Result<Vec<persistence::DocumentM
 }
 
 #[tauri::command]
+pub fn get_documents_dir(app: AppHandle) -> Result<String, String> {
+    persistence::documents_dir(&app)
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn fork_document(
     app: AppHandle,
     new_name: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let original_snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
-    let original_name = state.current_document_name.lock().unwrap().clone();
+    let original_path = state.current_document_path.lock().unwrap().clone();
 
-    if let Some(ref current_name) = original_name {
-        persistence::save_snapshot_named(&app, current_name, &original_snapshot)
-            .map_err(|e| e.to_string())?;
+    if let Some(ref path) = original_path {
+        persistence::save_snapshot(path, &original_snapshot).map_err(|e| e.to_string())?;
     }
 
     let mut fork_snapshot = original_snapshot;
@@ -88,7 +174,8 @@ pub async fn fork_document(
         reply,
     })
     .await?;
-    *state.current_document_name.lock().unwrap() = Some(new_name);
+    let fork_path = persistence::doc_path(&app, &new_name).map_err(|e| e.to_string())?;
+    set_current_file(&state, Some(new_name), Some(fork_path));
 
     Ok(text)
 }
@@ -96,7 +183,7 @@ pub async fn fork_document(
 #[tauri::command]
 pub fn delete_document(app: AppHandle, name: String) -> Result<(), String> {
     let dir = persistence::documents_dir(&app).map_err(|e| e.to_string())?;
-    let path = dir.join(format!("{name}.pcdoc"));
+    let path = dir.join(format!("{name}.{FILE_EXTENSION}"));
     if path.exists() {
         fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
@@ -111,6 +198,16 @@ pub async fn get_document_text(state: State<'_, AppState>) -> Result<String, Str
 #[tauri::command]
 pub fn get_current_document_name(state: State<'_, AppState>) -> Result<Option<String>, String> {
     Ok(state.current_document_name.lock().unwrap().clone())
+}
+
+#[tauri::command]
+pub fn get_current_document_path(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(state
+        .current_document_path
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|p| p.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -159,6 +256,6 @@ pub async fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
         reply,
     })
     .await?;
-    *state.current_document_name.lock().unwrap() = None;
+    set_current_file(&state, None, None);
     Ok(())
 }

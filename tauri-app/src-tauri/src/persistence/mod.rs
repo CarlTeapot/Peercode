@@ -1,5 +1,6 @@
 pub mod commands;
 mod io;
+mod recents;
 
 use crdt_core::SnapshotError;
 use serde::Serialize;
@@ -46,8 +47,14 @@ impl From<SnapshotError> for PersistError {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocumentMeta {
     pub name: String,
+    pub path: String,
     pub size_bytes: u64,
     pub modified: Option<u64>,
+    pub external: bool,
 }
 
-pub use io::{documents_dir, list_documents, load_named, save_named, save_snapshot_named};
+pub use io::{
+    doc_path, documents_dir, list_documents, load_document, load_named, migrate_legacy_documents,
+    save_named, save_snapshot, save_snapshot_named,
+};
+pub use recents::record_recent;

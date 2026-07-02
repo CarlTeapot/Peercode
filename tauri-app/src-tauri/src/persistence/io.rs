@@ -1,11 +1,13 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crdt_core::{Document, Snapshot};
+use log::{info, warn};
 use tauri::{AppHandle, Manager};
 
-use super::{DocumentMeta, PersistError, FILE_EXTENSION, FORMAT_VERSION, MAGIC};
+use super::{recents, DocumentMeta, PersistError, FILE_EXTENSION, FORMAT_VERSION, MAGIC};
 
 const FORBIDDEN_CHARS: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
 
@@ -42,11 +44,63 @@ fn is_valid_name(name: &str) -> bool {
 }
 
 pub fn documents_dir(app: &AppHandle) -> Result<PathBuf, PersistError> {
+    match app.path().document_dir() {
+        Ok(docs) => Ok(docs.join("PeerCode")),
+        Err(_) => legacy_documents_dir(app),
+    }
+}
+
+/// Pre-migration library location, hidden inside the app-data dir.
+fn legacy_documents_dir(app: &AppHandle) -> Result<PathBuf, PersistError> {
     let base = app
         .path()
         .app_data_dir()
         .map_err(|e| PersistError::Io(std::io::Error::other(e.to_string())))?;
     Ok(base.join("documents"))
+}
+
+/// One time migratin
+pub fn migrate_legacy_documents(app: &AppHandle) -> Result<(), PersistError> {
+    let legacy = legacy_documents_dir(app)?;
+    let target = documents_dir(app)?;
+    if legacy == target {
+        return Ok(());
+    }
+
+    let iter = match fs::read_dir(&legacy) {
+        Ok(it) => it,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut migrated = 0usize;
+    for entry in iter {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some(FILE_EXTENSION) {
+            continue;
+        }
+        let Some(file_name) = path.file_name() else {
+            continue;
+        };
+        let dest = target.join(file_name);
+        if dest.exists() {
+            continue;
+        }
+        fs::create_dir_all(&target)?;
+        match fs::copy(&path, &dest) {
+            Ok(_) => migrated += 1,
+            Err(e) => warn!("failed to migrate {}: {e}", path.display()),
+        }
+    }
+    if migrated > 0 {
+        info!(
+            "migrated {migrated} document(s) from {} to {}",
+            legacy.display(),
+            target.display()
+        );
+    }
+    Ok(())
 }
 
 pub fn doc_path(app: &AppHandle, name: &str) -> Result<PathBuf, PersistError> {
@@ -124,7 +178,30 @@ pub fn load_document(path: &Path) -> Result<Document, PersistError> {
     Ok(doc)
 }
 
+/// Library documents plus recently used external files, deduplicated by
+/// canonical path and sorted newest first.
 pub fn list_documents(app: &AppHandle) -> Result<Vec<DocumentMeta>, PersistError> {
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut docs = list_library_documents(app, &mut seen)?;
+
+    for path in recents::read_recents(app) {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if !seen.insert(canonical) {
+            continue;
+        }
+        if let Some(meta) = meta_for_path(&path, true) {
+            docs.push(meta);
+        }
+    }
+
+    docs.sort_by_key(|d| std::cmp::Reverse(d.modified));
+    Ok(docs)
+}
+
+fn list_library_documents(
+    app: &AppHandle,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<Vec<DocumentMeta>, PersistError> {
     let dir = documents_dir(app)?;
 
     let iter = match fs::read_dir(&dir) {
@@ -140,28 +217,37 @@ pub fn list_documents(app: &AppHandle) -> Result<Vec<DocumentMeta>, PersistError
         if path.extension().and_then(|e| e.to_str()) != Some(FILE_EXTENSION) {
             continue;
         }
-
-        let name = match path.file_stem().and_then(|s| s.to_str()) {
-            Some(n) if is_valid_name(n) => n.to_string(),
-            _ => continue,
-        };
-
-        let metadata = entry.metadata()?;
-        let modified = metadata
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs());
-
-        docs.push(DocumentMeta {
-            name,
-            size_bytes: metadata.len(),
-            modified,
-        });
+        if !path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .is_some_and(is_valid_name)
+        {
+            continue;
+        }
+        seen.insert(path.canonicalize().unwrap_or_else(|_| path.clone()));
+        if let Some(meta) = meta_for_path(&path, false) {
+            docs.push(meta);
+        }
     }
-
-    docs.sort_by_key(|d| std::cmp::Reverse(d.modified));
     Ok(docs)
+}
+
+fn meta_for_path(path: &Path, external: bool) -> Option<DocumentMeta> {
+    let name = path.file_stem()?.to_string_lossy().into_owned();
+    let metadata = fs::metadata(path).ok()?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+
+    Some(DocumentMeta {
+        name,
+        path: path.to_string_lossy().into_owned(),
+        size_bytes: metadata.len(),
+        modified,
+        external,
+    })
 }
 
 pub fn save_named(app: &AppHandle, name: &str, doc: &Document) -> Result<(), PersistError> {
