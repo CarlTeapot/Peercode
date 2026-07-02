@@ -7,7 +7,7 @@ import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import { normalizeToLF, forceModelLF } from "./eol";
 import { UsernameGate } from "./usernameSetup";
-import { FileMenu } from "./components/FileMenu";
+import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
 import "./App.css";
 
@@ -237,8 +237,10 @@ function AppContent({ username }: AppContentProps) {
   return (
     <>
       <div className="toolbar">
+        <span className="toolbar-brand">
+          Peer<span className="toolbar-brand-accent">Code</span>
+        </span>
         <FileMenu onDocumentLoaded={handleDocumentLoaded} />
-        <span>Monaco Test Harness</span>
         {username && <span className="toolbar-username">{username}</span>}
         {isDevFeaturesEnabled && (
           <button
