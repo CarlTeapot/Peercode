@@ -11,7 +11,6 @@ use crate::state::appstate::AppState;
 
 use super::FILE_EXTENSION;
 
-
 pub use document_ops::*;
 pub use export::*;
 pub use load::*;
@@ -21,7 +20,6 @@ fn set_current_file(state: &AppState, name: Option<String>, path: Option<PathBuf
     *state.current_document_name.lock().unwrap() = name;
     *state.current_document_path.lock().unwrap() = path;
 }
-
 
 fn set_export_path(state: &AppState, path: Option<PathBuf>) {
     *state.current_export_path.lock().unwrap() = path;
