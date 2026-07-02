@@ -233,7 +233,13 @@ fn list_library_documents(
 }
 
 fn meta_for_path(path: &Path, external: bool) -> Option<DocumentMeta> {
-    let name = path.file_stem()?.to_string_lossy().into_owned();
+    let is_pcdoc = path.extension().and_then(|e| e.to_str()) == Some(FILE_EXTENSION);
+
+    let name = if is_pcdoc {
+        path.file_stem()?.to_string_lossy().into_owned()
+    } else {
+        path.file_name()?.to_string_lossy().into_owned()
+    };
     let metadata = fs::metadata(path).ok()?;
     let modified = metadata
         .modified()

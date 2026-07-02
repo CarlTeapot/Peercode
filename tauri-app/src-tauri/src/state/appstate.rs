@@ -16,6 +16,7 @@ pub struct AppState {
     pub processes: Mutex<HostProcesses>,
     pub current_document_name: Mutex<Option<String>>,
     pub current_document_path: Mutex<Option<std::path::PathBuf>>,
+    pub current_export_path: Mutex<Option<std::path::PathBuf>>,
     pub sync_maintenance: SyncMaintenance,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
@@ -69,6 +70,7 @@ impl AppState {
             }),
             current_document_name: Mutex::new(None),
             current_document_path: Mutex::new(None),
+            current_export_path: Mutex::new(None),
             sync_maintenance: SyncMaintenance::new(),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),

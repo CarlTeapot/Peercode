@@ -1,6 +1,9 @@
 pub mod commands;
 mod io;
 mod recents;
+mod text_import;
+#[cfg(test)]
+mod text_import_tests;
 
 use crdt_core::SnapshotError;
 use serde::Serialize;
@@ -16,6 +19,9 @@ pub enum PersistError {
     UnsupportedFormat(u8),
     Snapshot(SnapshotError),
     InvalidName(String),
+    NotUtf8,
+    TooLarge(u64),
+    IsPcdoc,
 }
 
 impl std::fmt::Display for PersistError {
@@ -28,6 +34,13 @@ impl std::fmt::Display for PersistError {
             }
             PersistError::Snapshot(e) => write!(f, "snapshot error: {e}"),
             PersistError::InvalidName(msg) => write!(f, "invalid document name: {msg}"),
+            PersistError::NotUtf8 => write!(f, "file is not readable UTF-8 text"),
+            PersistError::TooLarge(max) => {
+                write!(f, "file is larger than the {} MB import limit", max >> 20)
+            }
+            PersistError::IsPcdoc => {
+                write!(f, "this is a PeerCode document; use Open instead")
+            }
         }
     }
 }
@@ -58,3 +71,4 @@ pub use io::{
     save_named, save_snapshot, save_snapshot_named,
 };
 pub use recents::record_recent;
+pub use text_import::{read_text_for_import, IMPORT_CHUNK_CHARS};

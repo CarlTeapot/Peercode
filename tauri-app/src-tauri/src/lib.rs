@@ -129,9 +129,11 @@ pub fn run() {
             persistence::commands::get_current_document_path,
             persistence::commands::fork_document,
             persistence::commands::delete_document,
-            persistence::commands::get_document_text,
             persistence::commands::get_current_document_name,
-            persistence::commands::save_text_file,
+            persistence::commands::import_text_file,
+            persistence::commands::export_document_to_path,
+            persistence::commands::export_current_document,
+            persistence::commands::get_current_export_path,
             persistence::commands::reset_document,
             #[cfg(debug_assertions)]
             doc_commands::toggle_crdt_logging

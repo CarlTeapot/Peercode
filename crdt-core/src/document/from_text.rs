@@ -19,7 +19,6 @@ impl Document {
     }
 }
 
-
 pub(super) fn char_chunks(text: &str, max_chars: usize) -> impl Iterator<Item = &str> {
     let mut rest = text;
     std::iter::from_fn(move || {
