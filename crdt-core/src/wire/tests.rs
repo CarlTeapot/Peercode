@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::DeleteSet;
+use crate::store::{DeleteSet, StateVector};
 use crate::structs::Block;
 use crate::types::{BlockId, ClientId, Clock};
 
@@ -120,6 +120,7 @@ fn encode_decode_snapshot_round_trips() {
             right: None,
             content: "hello".to_string(),
             is_deleted: false,
+            len: 5,
         }],
         state_vector: vec![(ClientId::new(42), 1)],
         delete_set: DeleteSet::new(),
@@ -149,4 +150,93 @@ fn decode_snapshot_rejects_op_prefix() {
 #[test]
 fn decode_snapshot_rejects_empty_frame() {
     assert!(matches!(decode_snapshot(&[]), Err(WireError::EmptyFrame)));
+}
+
+#[test]
+fn encode_decode_gc_commit_round_trips() {
+    let floor = StateVector::from_entries(vec![(ClientId::new(1), 3), (ClientId::new(2), 7)]);
+    let frame = encode_gc_commit(&floor);
+    assert_eq!(frame[0], PREFIX_GC_COMMIT);
+    let decoded = decode_gc_commit(&frame).expect("decode");
+    assert_eq!(decoded, floor);
+}
+
+#[test]
+fn decode_gc_commit_rejects_op_prefix() {
+    let frame = vec![OP_PREFIX, 0x00];
+    assert!(matches!(
+        decode_gc_commit(&frame),
+        Err(WireError::NotAGcCommit)
+    ));
+}
+
+#[test]
+fn encode_decode_sv_report_round_trips() {
+    let sender = ClientId::new(7);
+    let entries = vec![(ClientId::new(1), 4u64), (ClientId::new(9), 0u64)];
+    let frame = encode_sv_report(sender, &entries);
+    assert_eq!(frame[0], PREFIX_SV_REPORT);
+    let (decoded_sender, decoded) = decode_sv_report(&frame).expect("decode");
+    assert_eq!(decoded_sender, sender);
+    assert_eq!(decoded, entries);
+}
+
+#[test]
+fn encode_decode_empty_sv_report_round_trips() {
+    let sender = ClientId::new(3);
+    let frame = encode_sv_report(sender, &[]);
+    assert_eq!(frame[0], PREFIX_SV_REPORT);
+    let (decoded_sender, decoded) = decode_sv_report(&frame).expect("decode");
+    assert_eq!(decoded_sender, sender);
+    assert_eq!(decoded, Vec::new());
+}
+
+#[test]
+fn decode_sv_report_rejects_snapshot_prefix() {
+    let frame = vec![SNAPSHOT_PREFIX, 0x00];
+    assert!(matches!(
+        decode_sv_report(&frame),
+        Err(WireError::NotAnSvReport)
+    ));
+}
+
+#[test]
+fn membership_round_trips_joined_and_left() {
+    for event in [MembershipEvent::Joined, MembershipEvent::Left] {
+        let frame = MembershipFrame {
+            client_id: ClientId::new(0x0102_0304_0506_0708),
+            event,
+        };
+        let bytes = encode_membership(&frame);
+        assert_eq!(bytes.len(), 10);
+        assert_eq!(bytes[0], PREFIX_MEMBERSHIP);
+        assert_eq!(decode_membership(&bytes).expect("decode"), frame);
+    }
+}
+
+#[test]
+fn decode_membership_rejects_wrong_prefix() {
+    let frame = vec![OP_PREFIX, PEER_JOINED, 0, 0, 0, 0, 0, 0, 0, 0];
+    assert!(matches!(
+        decode_membership(&frame),
+        Err(WireError::NotAMember)
+    ));
+}
+
+#[test]
+fn decode_membership_rejects_bad_length() {
+    let frame = vec![PREFIX_MEMBERSHIP, PEER_JOINED, 0, 0];
+    assert!(matches!(
+        decode_membership(&frame),
+        Err(WireError::MalformedMembership)
+    ));
+}
+
+#[test]
+fn decode_membership_rejects_unknown_event() {
+    let frame = vec![PREFIX_MEMBERSHIP, 0xEE, 0, 0, 0, 0, 0, 0, 0, 1];
+    assert!(matches!(
+        decode_membership(&frame),
+        Err(WireError::MalformedMembership)
+    ));
 }

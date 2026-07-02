@@ -1,3 +1,4 @@
+use crate::garbage_collection::SyncMaintenance;
 use crate::processes::types::{CombinedWorkflowResult, Sidecar, SidecarStatus};
 use crate::state::document::DocSender;
 use crate::state::ws_state::WsState;
@@ -14,6 +15,7 @@ pub struct AppState {
     pub(crate) role: Mutex<AppRole>,
     pub processes: Mutex<HostProcesses>,
     pub current_document_name: Mutex<Option<String>>,
+    pub sync_maintenance: SyncMaintenance,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
 }
@@ -65,12 +67,14 @@ impl AppState {
                 tunnel_metrics_task: None,
             }),
             current_document_name: Mutex::new(None),
+            sync_maintenance: SyncMaintenance::new(),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
         }
     }
 
     pub fn leave_session(&self, ws: &WsState) {
+        self.sync_maintenance.stop_all();
         ws.disconnect_nowait();
     }
 

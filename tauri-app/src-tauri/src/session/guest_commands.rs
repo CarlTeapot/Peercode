@@ -71,6 +71,7 @@ pub async fn join_session(
                 "join_session role transitioned to Guest: room_id={}",
                 join_info.room_id
             );
+            state.sync_maintenance.start_guest_sv_reporter(app.clone());
             spawn_disconnect_handler(app, disconnect_rx);
             Ok(())
         }

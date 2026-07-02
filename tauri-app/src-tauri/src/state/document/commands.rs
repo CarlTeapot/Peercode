@@ -39,7 +39,7 @@ pub async fn insert(
 
     if let Some(wire_block) = wire_block_opt {
         let frame = encode_op(&OpMessage::Insert(wire_block));
-        ws.send_raw(frame).await;
+        let _ = ws.send_raw(frame).await;
     }
 
     Ok(())
@@ -72,7 +72,7 @@ pub async fn delete(
 
     if !delete_set.is_empty() {
         let frame = encode_op(&OpMessage::Delete(delete_set));
-        ws.send_raw(frame).await;
+        let _ = ws.send_raw(frame).await;
     }
 
     Ok(())
@@ -114,11 +114,11 @@ pub async fn replace(
 
     if !delete_set.is_empty() {
         let frame = encode_op(&OpMessage::Delete(delete_set));
-        ws.send_raw(frame).await;
+        let _ = ws.send_raw(frame).await;
     }
     if let Some(wire_block) = wire_block_opt {
         let frame = encode_op(&OpMessage::Insert(wire_block));
-        ws.send_raw(frame).await;
+        let _ = ws.send_raw(frame).await;
     }
 
     Ok(())

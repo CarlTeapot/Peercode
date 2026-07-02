@@ -15,6 +15,7 @@ pub fn spawn_disconnect_handler(app: AppHandle, rx: oneshot::Receiver<Disconnect
         };
         info!("disconnect handler: received reason={reason:?}");
         let state = app.state::<AppState>();
+        state.sync_maintenance.stop_all();
         if matches!(reason, DisconnectReason::ConnectionLost)
             && matches!(state.current_role(), AppRole::Host { .. })
         {

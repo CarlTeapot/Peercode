@@ -1,6 +1,6 @@
-use super::Document;
+use super::{Document, RemoteChange};
 use crate::error::DocumentError;
-use crate::store::DeleteSet;
+use crate::store::{DeleteSet, StateVector};
 use crate::structs::Block;
 use crate::types::{BlockId, Clock};
 use crate::wire::WireBlock;
@@ -173,34 +173,87 @@ impl Document {
         Ok(diff)
     }
 
-    /// Reclaim storage for every block whose tombstone is covered by
-    /// `confirmed`. Content bytes are cleared
-    pub fn collect_garbage(&mut self, confirmed: &DeleteSet) {
+    /// Reclaim tombstones covered by `confirmed`: defensively re-apply the
+    /// deletes (returning any this peer hadn't seen), unlink fully confirmed
+    /// tombstone blocks from the document list/store, and prune delete metadata.
+    /// Idempotent.
+    pub fn collect_garbage(
+        &mut self,
+        confirmed: &DeleteSet,
+    ) -> Result<Vec<RemoteChange>, DocumentError> {
         debug!(
             "garbage-collect start: confirmed_ranges={}",
             confirmed.iter().count()
         );
-        let mut erased_blocks = 0_u64;
-        for (client, range) in confirmed.iter() {
-            let mut current_clock = range.start;
-            let end_clock = range.end();
 
-            while current_clock < end_clock {
-                let id = BlockId::new(*client, Clock::new(current_clock));
+        let changes = self.apply_delete_set(confirmed)?;
 
-                let Some(block) = self.store.get(&id) else {
-                    break;
-                };
-                let next_clock = block.id.clock.value + block.len;
+        let ids: Vec<BlockId> = self
+            .store
+            .all_blocks()
+            .filter(|block| block.is_deleted && confirmed.covers(&block.id, block.len))
+            .map(|block| block.id)
+            .collect();
+        let removed_blocks = self.unlink_blocks(ids);
 
-                self.store.erase_content(&id);
-                erased_blocks += 1;
-                current_clock = next_clock;
+        self.prune_after_gc(confirmed);
+
+        debug!(
+            "garbage-collect outcome: removed {} tombstoned blocks, {} replayed change(s)",
+            removed_blocks,
+            changes.len()
+        );
+        Ok(changes)
+    }
+
+    pub fn collect_garbage_below(&mut self, floor: &StateVector) -> Result<(), DocumentError> {
+        debug!(
+            "garbage-collect floor start: clients={}",
+            floor.iter().count()
+        );
+
+        let ids: Vec<BlockId> = self
+            .store
+            .all_blocks()
+            .filter(|block| {
+                block.is_deleted && block.id.clock.value + block.len <= floor.get(&block.id.client)
+            })
+            .map(|block| block.id)
+            .collect();
+
+        let removed_blocks = self.unlink_blocks(ids);
+
+        self.prune_after_gc_commit(floor);
+
+        debug!("garbage-collect floor outcome: removed {removed_blocks} tombstoned block(s)");
+        Ok(())
+    }
+
+    fn unlink_blocks(&mut self, ids: Vec<BlockId>) -> u64 {
+        let mut removed_blocks = 0_u64;
+        for id in ids {
+            if self.unlink_block(id) {
+                removed_blocks += 1;
             }
         }
-        debug!(
-            "garbage-collect outcome: erased content for {} tombstoned blocks",
-            erased_blocks
-        );
+        if removed_blocks > 0 {
+            self.rebuild_position_index_from_links();
+
+            #[cfg(debug_assertions)]
+            self.assert_index_matches_linked_list();
+        }
+        removed_blocks
+    }
+
+    pub fn prune_after_gc(&mut self, confirmed: &DeleteSet) {
+        self.delete_set.subtract(confirmed);
+        self.seen_delete_set.subtract(confirmed);
+    }
+
+    pub fn prune_after_gc_commit(&mut self, floor: &StateVector) {
+        for (client, clock) in floor.iter() {
+            self.delete_set.subtract_prefix(*client, *clock);
+            self.seen_delete_set.subtract_prefix(*client, *clock);
+        }
     }
 }

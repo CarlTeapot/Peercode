@@ -68,6 +68,23 @@ impl DeleteSet {
         }
     }
 
+    pub fn covers(&self, id: &BlockId, len: u64) -> bool {
+        if len == 0 {
+            return true;
+        }
+        match self.ranges.get(&id.client) {
+            Some(list) => {
+                let idx = list.partition_point(|r| r.start <= id.clock.value);
+                if idx == 0 {
+                    return false;
+                }
+                let range = &list[idx - 1];
+                id.clock.value >= range.start && id.clock.value + len <= range.end()
+            }
+            None => false,
+        }
+    }
+
     pub fn merge(&mut self, other: &DeleteSet) {
         for (client, ranges) in &other.ranges {
             let list = self.ranges.entry(*client).or_default();
@@ -75,6 +92,87 @@ impl DeleteSet {
                 list.push(range.clone());
             }
             Self::compress(list);
+        }
+    }
+
+    /// Remove every clock covered by `holes`. Assumes both sets are compressed
+    /// (sorted, disjoint), as the public API guarantees. Idempotent.
+    pub fn subtract(&mut self, holes: &DeleteSet) {
+        for (client, client_holes) in &holes.ranges {
+            let result: Vec<DeleteRange> = match self.ranges.get(client) {
+                Some(list) => {
+                    let mut out = Vec::new();
+                    for r in list {
+                        Self::subtract_holes_from_range(r, client_holes, &mut out);
+                    }
+                    out
+                }
+                None => continue,
+            };
+            if result.is_empty() {
+                self.ranges.remove(client);
+            } else {
+                self.ranges.insert(*client, result);
+            }
+        }
+    }
+
+    pub fn subtract_prefix(&mut self, client: ClientId, floor: u64) {
+        let Some(list) = self.ranges.get(&client) else {
+            return;
+        };
+        let mut out = Vec::new();
+        for range in list {
+            if range.end() <= floor {
+                continue;
+            }
+            if range.start < floor {
+                out.push(DeleteRange {
+                    start: floor,
+                    len: range.end() - floor,
+                });
+            } else {
+                out.push(range.clone());
+            }
+        }
+        if out.is_empty() {
+            self.ranges.remove(&client);
+        } else {
+            self.ranges.insert(client, out);
+        }
+    }
+
+    /// Emit the portions of `r` not covered by `holes` (sorted, disjoint) into `out`.
+    fn subtract_holes_from_range(
+        r: &DeleteRange,
+        holes: &[DeleteRange],
+        out: &mut Vec<DeleteRange>,
+    ) {
+        let mut cur = r.start;
+        let end = r.end();
+        for hole in holes {
+            if hole.end() <= cur {
+                continue;
+            }
+            if hole.start >= end {
+                break;
+            }
+            if hole.start > cur {
+                out.push(DeleteRange {
+                    start: cur,
+                    len: hole.start - cur,
+                });
+            }
+            cur = cur.max(hole.end());
+            if cur >= end {
+                return;
+            }
+        }
+        if cur < end {
+            out.push(DeleteRange {
+                start: cur,
+                len: end - cur,
+            });
         }
     }
 
@@ -106,3 +204,6 @@ impl DeleteSet {
         *list = merged;
     }
 }
+
+#[cfg(test)]
+mod tests;

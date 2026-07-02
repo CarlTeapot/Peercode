@@ -1,4 +1,4 @@
-use crdt_core::store::DeleteSet;
+use crdt_core::store::{DeleteSet, StateVector};
 use crdt_core::types::ClientId;
 use crdt_core::wire::WireBlock;
 use crdt_core::{Document, OpMessage, Snapshot};
@@ -49,6 +49,16 @@ pub enum DocOp {
     },
     GetClientId {
         reply: oneshot::Sender<ClientId>,
+    },
+    GetStateVector {
+        reply: oneshot::Sender<StateVector>,
+    },
+    FetchGcData {
+        reply: oneshot::Sender<(StateVector, DeleteSet)>,
+    },
+    ApplyGcCommit {
+        floor: StateVector,
+        reply: oneshot::Sender<Result<(), String>>,
     },
     #[cfg(debug_assertions)]
     DebugLinkedList {

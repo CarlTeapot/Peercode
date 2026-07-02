@@ -5,7 +5,7 @@ use tauri::AppHandle;
 use tokio::sync::mpsc;
 
 use crate::state::document::client::DocSender;
-use crate::state::document::handlers::{local, remote, snapshot};
+use crate::state::document::handlers::{gc, local, remote, snapshot};
 use crate::state::document::state::DocState;
 use crate::state::document::types::{DocOp, DOC_CHANNEL_CAPACITY};
 
@@ -107,6 +107,19 @@ impl DocActor {
             }
             DocOp::GetClientId { reply } => {
                 let _ = reply.send(self.state.doc.client_id);
+            }
+            DocOp::GetStateVector { reply } => {
+                let _ = reply.send(self.state.doc.state_vector.clone());
+            }
+            DocOp::FetchGcData { reply } => {
+                let _ = reply.send((
+                    self.state.doc.state_vector.clone(),
+                    self.state.doc.delete_set.clone(),
+                ));
+            }
+            DocOp::ApplyGcCommit { floor, reply } => {
+                let result = gc::handle_apply_gc_commit(&mut self.state, &self.app, floor);
+                let _ = reply.send(result);
             }
             #[cfg(debug_assertions)]
             DocOp::DebugLinkedList { reply } => {

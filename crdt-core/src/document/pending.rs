@@ -145,6 +145,11 @@ impl Document {
                 let (block_start, block_len, block_id, was_deleted) = match self.store.get(&id) {
                     Some(b) => (b.id.clock.value, b.len, b.id, b.is_deleted),
                     None => {
+                        let seen = self.state_vector.get(client);
+                        if seen > current_clock {
+                            current_clock = seen.min(end_clock);
+                            continue;
+                        }
                         unapplied.add(id, end_clock - current_clock);
                         break;
                     }

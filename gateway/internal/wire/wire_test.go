@@ -76,6 +76,22 @@ func TestValidateFrame_AcceptsOpAndSnapshot(t *testing.T) {
 	}
 }
 
+func TestValidateFrame_AcceptsGcCommitAndSvReport(t *testing.T) {
+	if err := ValidateFrame([]byte{PrefixGcCommit, 0x00}); err != nil {
+		t.Fatalf("ValidateFrame(gc_commit) = %v, want nil", err)
+	}
+	if err := ValidateFrame([]byte{PrefixSvReport, 0x00}); err != nil {
+		t.Fatalf("ValidateFrame(sv_report) = %v, want nil", err)
+	}
+}
+
+func TestValidateFrame_RejectsInboundMembership(t *testing.T) {
+	// Membership is gateway-authored only; a client must not be able to inject one.
+	if err := ValidateFrame([]byte{PrefixMembership, MembershipJoined}); !errors.Is(err, ErrUnknownPrefix) {
+		t.Fatalf("ValidateFrame(membership) = %v, want ErrUnknownPrefix", err)
+	}
+}
+
 func TestValidateFrame_RejectsUnknown(t *testing.T) {
 	if err := ValidateFrame([]byte{0xFF}); !errors.Is(err, ErrUnknownPrefix) {
 		t.Fatalf("ValidateFrame(0xFF) = %v, want ErrUnknownPrefix", err)

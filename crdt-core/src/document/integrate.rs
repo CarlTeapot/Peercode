@@ -189,22 +189,41 @@ impl Document {
                 return Ok(None);
             };
 
-            let new_block_content: String = block.content().chars().skip(offset as usize).collect();
-            block.set_content(block.content().chars().take(offset as usize).collect());
-
+            let block_self_id = block.id;
+            let block_origin_right = block.origin_right;
+            let block_is_deleted = block.is_deleted;
+            let total_len = block.len;
+            let old_right_block_id = block.right();
             let new_block_id = BlockId {
                 client: block.id.client,
                 clock: block.id.clock.advance(offset),
             };
-            let old_right_block_id = block.right();
-            let mut new_block: Block = Block::new(
-                new_block_id,
-                Some(block.id),
-                block.origin_right,
-                new_block_content,
-            );
 
-            new_block.is_deleted = block.is_deleted;
+            // GC'd tombstone (content erased, len retained): split by length, not
+            // by re-slicing the empty content, which would zero both halves' len.
+            let mut new_block: Block = if block_is_deleted && block.is_empty() {
+                block.len = offset;
+                let mut nb = Block::new(
+                    new_block_id,
+                    Some(block_self_id),
+                    block_origin_right,
+                    String::new(),
+                );
+                nb.len = total_len - offset;
+                nb
+            } else {
+                let new_block_content: String =
+                    block.content().chars().skip(offset as usize).collect();
+                block.set_content(block.content().chars().take(offset as usize).collect());
+                Block::new(
+                    new_block_id,
+                    Some(block_self_id),
+                    block_origin_right,
+                    new_block_content,
+                )
+            };
+
+            new_block.is_deleted = block_is_deleted;
             new_block.set_right(old_right_block_id);
 
             block.set_right(Some(new_block_id));

@@ -56,7 +56,7 @@ fn apply_delete(
     }
 }
 
-fn emit_changes(state: &mut DocState, app: &AppHandle, changes: Vec<RemoteChange>) {
+pub(super) fn emit_changes(state: &mut DocState, app: &AppHandle, changes: Vec<RemoteChange>) {
     for change in changes {
         let seq = state.mint_seq();
         state.op_log.push(seq, position_delta_of(&change));

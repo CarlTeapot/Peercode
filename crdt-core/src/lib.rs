@@ -12,6 +12,8 @@ pub use error::DocumentError;
 pub use index::{FindResult, PositionIndex};
 pub use snapshot::{Snapshot, SnapshotBlock, SnapshotError};
 pub use wire::{
-    OP_PREFIX, OpMessage, SNAPSHOT_PREFIX, WireBlock, WireError, decode_op, decode_snapshot,
-    encode_op, encode_snapshot,
+    GcCommit, MembershipEvent, MembershipFrame, OP_PREFIX, OpMessage, PREFIX_GC_COMMIT,
+    PREFIX_MEMBERSHIP, PREFIX_SV_REPORT, SNAPSHOT_PREFIX, WireBlock, WireError, decode_gc_commit,
+    decode_membership, decode_op, decode_snapshot, decode_sv_report, encode_gc_commit,
+    encode_membership, encode_op, encode_snapshot, encode_sv_report,
 };

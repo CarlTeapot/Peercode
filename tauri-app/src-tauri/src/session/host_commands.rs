@@ -35,6 +35,11 @@ pub async fn host_session(app: AppHandle) -> Result<(), String> {
         setup.local_room_url.clone(),
         setup.public_room_url.clone(),
     )?;
+
+    app.state::<AppState>()
+        .sync_maintenance
+        .start_host_gc(app.clone());
+
     emit_session_ready(&app, &setup)?;
     info!(
         "start_host_session completed: room_id={} port={}",

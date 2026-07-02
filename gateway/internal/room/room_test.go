@@ -1,6 +1,7 @@
 package room
 
 import (
+	"bytes"
 	"errors"
 	"log/slog"
 	"os"
@@ -12,6 +13,20 @@ import (
 	gatewaymetrics "gateway/internal/metrics"
 	"gateway/internal/wire"
 )
+
+// drainFrames non-blockingly collects all frames currently queued on a client's
+// (open) send channel.
+func drainFrames(c *client.Client) [][]byte {
+	var out [][]byte
+	for {
+		select {
+		case f := <-c.SendChan():
+			out = append(out, f)
+		default:
+			return out
+		}
+	}
+}
 
 func init() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
@@ -200,5 +215,128 @@ func TestRoom_DuplicateClientIDRejected(t *testing.T) {
 	}
 
 	r.Leave(a, nil)
+	<-runDone
+}
+
+func TestRoom_JoinBroadcastsMembershipToExistingMembers(t *testing.T) {
+	r := New("room-membership-join", gatewaymetrics.New())
+	host := client.New("1", "room-membership-join", nil)
+	guest := client.New("2", "room-membership-join", nil)
+
+	if err := r.Join(host); err != nil {
+		t.Fatalf("join host: %v", err)
+	}
+	if got := drainFrames(host); len(got) != 0 {
+		t.Fatalf("first joiner received %d frames, want 0", len(got))
+	}
+
+	if err := r.Join(guest); err != nil {
+		t.Fatalf("join guest: %v", err)
+	}
+
+	hostFrames := drainFrames(host)
+	if len(hostFrames) != 1 {
+		t.Fatalf("host received %d frames, want 1 (joined guest)", len(hostFrames))
+	}
+	want := wire.EncodeMembershipFrame(2, wire.MembershipJoined)
+	if !bytes.Equal(hostFrames[0], want) {
+		t.Fatalf("host received %x, want membership-joined for client 2 %x", hostFrames[0], want)
+	}
+
+	if got := drainFrames(guest); len(got) != 0 {
+		t.Fatalf("joiner received its own membership (%d frames), want 0", len(got))
+	}
+}
+
+func TestRoom_LeaveBroadcastsMembershipToRemaining(t *testing.T) {
+	r := New("room-membership-leave", gatewaymetrics.New())
+	host := client.New("1", "room-membership-leave", nil)
+	guest := client.New("2", "room-membership-leave", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host) // discard joined(guest)
+
+	r.Leave(guest, nil)
+
+	hostFrames := drainFrames(host)
+	if len(hostFrames) != 1 {
+		t.Fatalf("host received %d frames after guest left, want 1 (left guest)", len(hostFrames))
+	}
+	want := wire.EncodeMembershipFrame(2, wire.MembershipLeft)
+	if !bytes.Equal(hostFrames[0], want) {
+		t.Fatalf("host received %x, want membership-left for client 2 %x", hostFrames[0], want)
+	}
+}
+
+func TestRoom_NonNumericClientIDSkipsMembership(t *testing.T) {
+	// Existing tests rely on this: a non-numeric client_id cannot be encoded into
+	// the fixed u64 membership layout, so the join/leave proceeds without membership
+	// rather than failing.
+	r := New("room-membership-nonnumeric", gatewaymetrics.New())
+	host := client.New("1", "room-membership-nonnumeric", nil)
+	weird := client.New("not-a-number", "room-membership-nonnumeric", nil)
+	_ = r.Join(host)
+	_ = drainFrames(host)
+
+	if err := r.Join(weird); err != nil {
+		t.Fatalf("join weird: %v", err)
+	}
+	if got := drainFrames(host); len(got) != 0 {
+		t.Fatalf("host received %d membership frames for non-numeric id, want 0", len(got))
+	}
+}
+
+func TestRoom_GcCommitBroadcastsToPeers(t *testing.T) {
+	r := New("room-gc", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-gc", nil)
+	guest := client.New("2", "room-gc", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	gc := []byte{wire.PrefixGcCommit, 0xAA, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: host, Data: gc}
+
+	select {
+	case f := <-guest.SendChan():
+		if !bytes.Equal(f, gc) {
+			t.Fatalf("guest received %x, want gc-commit %x", f, gc)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("guest did not receive gc-commit broadcast")
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
+func TestRoom_GcCommitFromGuestIsDropped(t *testing.T) {
+	r := New("room-gc-guest", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-gc-guest", nil)
+	guest := client.New("2", "room-gc-guest", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	gc := []byte{wire.PrefixGcCommit, 0xAA, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: guest, Data: gc}
+
+	select {
+	case f := <-host.SendChan():
+		t.Fatalf("host received guest-authored gc-commit %x, want drop", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
 	<-runDone
 }

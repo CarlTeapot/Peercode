@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 // StateVector struct to represent the state of seen blocks for each client.
 // If sv[client] = N, it means we've seen all blocks from [0, N) clock values.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, bitcode::Encode, bitcode::Decode)]
 pub struct StateVector {
     state_map: HashMap<ClientId, u64>,
 }

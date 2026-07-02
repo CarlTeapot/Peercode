@@ -1,5 +1,9 @@
 use crdt_core::encode_snapshot;
-use crdt_core::wire::{CONTROL_SESSION_ENDED, CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL};
+use crdt_core::store::StateVector;
+use crdt_core::wire::{
+    decode_membership, decode_sv_report, MembershipEvent, CONTROL_SESSION_ENDED,
+    CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL, PREFIX_MEMBERSHIP, PREFIX_SV_REPORT,
+};
 use futures_util::StreamExt;
 use log::{debug, error, info, warn};
 use std::sync::{Arc, RwLock};
@@ -27,28 +31,30 @@ pub async fn receive_loop(
             Ok(Message::Text(text)) => {
                 debug!("ws recv text (len={}): {text}", text.len());
             }
-            Ok(Message::Binary(bytes)) => {
-                if bytes.first().copied() == Some(PREFIX_CONTROL) {
-                    match bytes.get(1).copied() {
-                        Some(CONTROL_SESSION_ENDED) => {
-                            info!("ws recv: session ended by host");
-                            reason = DisconnectReason::SessionEnded;
-                            break;
-                        }
-                        Some(CONTROL_SNAPSHOT_REQUEST) => {
-                            handle_snapshot_request(&app, &write_tx).await;
-                        }
-                        other => {
-                            warn!("ws recv: unknown control frame type={:?}; ignoring", other);
-                        }
+            Ok(Message::Binary(bytes)) => match bytes.first().copied() {
+                Some(PREFIX_CONTROL) => match bytes.get(1).copied() {
+                    Some(CONTROL_SESSION_ENDED) => {
+                        info!("ws recv: session ended by host");
+                        reason = DisconnectReason::SessionEnded;
+                        break;
                     }
-                    continue;
+                    Some(CONTROL_SNAPSHOT_REQUEST) => {
+                        handle_snapshot_request(&app, &write_tx).await;
+                    }
+                    other => {
+                        warn!("ws recv: unknown control frame type={:?}; ignoring", other);
+                    }
+                },
+                // Host-only coordinator inputs (guests have no gc sender → no-op).
+                Some(PREFIX_MEMBERSHIP) => route_membership(&app, &bytes).await,
+                Some(PREFIX_SV_REPORT) => route_sv_report(&app, &bytes).await,
+                _ => {
+                    debug!("ws receiver binary message (bytes={})", bytes.len());
+                    if op_tx.send(bytes.into()).is_err() {
+                        warn!("ws receiver: op processor channel closed; dropping frame");
+                    }
                 }
-                debug!("ws receiver binary message (bytes={})", bytes.len());
-                if op_tx.send(bytes.into()).is_err() {
-                    warn!("ws receiver: op processor channel closed; dropping frame");
-                }
-            }
+            },
             Ok(Message::Ping(_)) => {
                 debug!("ws receiver ping");
             }
@@ -123,5 +129,38 @@ async fn handle_snapshot_request(
             }
         }
         None => warn!("snapshot request: no active writer; snapshot dropped"),
+    }
+}
+
+async fn route_membership(app: &AppHandle, bytes: &[u8]) {
+    match decode_membership(bytes) {
+        Ok(frame) => match frame.event {
+            MembershipEvent::Joined => {
+                app.state::<AppState>()
+                    .sync_maintenance
+                    .peer_joined(frame.client_id)
+                    .await;
+            }
+            MembershipEvent::Left => {
+                app.state::<AppState>()
+                    .sync_maintenance
+                    .peer_left(frame.client_id)
+                    .await;
+            }
+        },
+        Err(e) => warn!("ws recv: membership decode failed: {e}"),
+    }
+}
+
+async fn route_sv_report(app: &AppHandle, bytes: &[u8]) {
+    match decode_sv_report(bytes) {
+        Ok((sender, entries)) => {
+            let sv = StateVector::from_entries(entries);
+            app.state::<AppState>()
+                .sync_maintenance
+                .peer_state_vector(sender, sv)
+                .await;
+        }
+        Err(e) => warn!("ws recv: sv-report decode failed: {e}"),
     }
 }

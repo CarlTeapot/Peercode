@@ -1,6 +1,9 @@
 package wire
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestPrefixConstantsMatchRustSource(t *testing.T) {
 	const (
@@ -10,6 +13,12 @@ func TestPrefixConstantsMatchRustSource(t *testing.T) {
 
 		rustControlSessionEnded    byte = 0x01
 		rustControlSnapshotRequest byte = 0x02
+
+		rustPrefixGcCommit   byte = 0x04
+		rustPrefixMembership byte = 0x05
+		rustPrefixSvReport   byte = 0x06
+		rustMembershipJoined byte = 0x01
+		rustMembershipLeft   byte = 0x02
 	)
 
 	if PrefixOp != rustOpPrefix {
@@ -26,5 +35,30 @@ func TestPrefixConstantsMatchRustSource(t *testing.T) {
 	}
 	if ControlSnapshotRequest != rustControlSnapshotRequest {
 		t.Fatalf("ControlSnapshotRequest = %#x, rust CONTROL_SNAPSHOT_REQUEST = %#x — protocol drift", ControlSnapshotRequest, rustControlSnapshotRequest)
+	}
+	if PrefixGcCommit != rustPrefixGcCommit {
+		t.Fatalf("PrefixGcCommit = %#x, rust PREFIX_GC_COMMIT = %#x — protocol drift", PrefixGcCommit, rustPrefixGcCommit)
+	}
+	if PrefixMembership != rustPrefixMembership {
+		t.Fatalf("PrefixMembership = %#x, rust PREFIX_MEMBERSHIP = %#x — protocol drift", PrefixMembership, rustPrefixMembership)
+	}
+	if PrefixSvReport != rustPrefixSvReport {
+		t.Fatalf("PrefixSvReport = %#x, rust PREFIX_SV_REPORT = %#x — protocol drift", PrefixSvReport, rustPrefixSvReport)
+	}
+	if MembershipJoined != rustMembershipJoined {
+		t.Fatalf("MembershipJoined = %#x, rust PEER_JOINED = %#x — protocol drift", MembershipJoined, rustMembershipJoined)
+	}
+	if MembershipLeft != rustMembershipLeft {
+		t.Fatalf("MembershipLeft = %#x, rust PEER_LEFT = %#x — protocol drift", MembershipLeft, rustMembershipLeft)
+	}
+}
+
+func TestMembershipLayoutMatchesRustSource(t *testing.T) {
+	// Must equal crdt-core/src/wire encode_membership for the same inputs; the Rust
+	// drift test pins the identical expected bytes.
+	got := EncodeMembershipFrame(0x0102030405060708, MembershipJoined)
+	want := []byte{PrefixMembership, MembershipJoined, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("EncodeMembershipFrame layout = %x, want %x — protocol drift", got, want)
 	}
 }

@@ -1001,3 +1001,231 @@ fn snapshot_version_mismatch_returns_error() {
     let result = Snapshot::decode(&bytes);
     assert!(result.is_err());
 }
+
+#[test]
+fn prune_after_gc_drops_confirmed_ranges_from_snapshot() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap(); // tombstone "hello" -> delete_set client1:[0,5)
+    assert!(!doc.to_snapshot().delete_set.is_empty());
+
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+    doc.prune_after_gc(&confirmed);
+
+    let snap = doc.to_snapshot();
+    assert!(
+        snap.delete_set.is_empty(),
+        "confirmed range must be pruned from delete_set"
+    );
+    assert!(snap.seen_delete_set.is_empty());
+    assert_eq!(
+        doc.get_text(),
+        " world",
+        "pruning must not affect visible text"
+    );
+}
+
+#[test]
+fn split_gc_erased_block_preserves_lengths() {
+    let (mut doc, id) = doc_with_single_block("hello"); // client 1, [0,5)
+    doc.mark_block_deleted(&id).unwrap();
+    assert!(doc.store.erase_content(&id), "content should be erased");
+    assert!(doc.store.get(&id).unwrap().is_empty());
+    assert_eq!(doc.store.get(&id).unwrap().len, 5);
+
+    doc.split_block(id, 2).unwrap();
+
+    let left = doc.store.get(&id).unwrap();
+    assert_eq!(left.len, 2, "left half keeps offset length");
+    assert!(left.is_deleted && left.is_empty());
+    let right_id = left.right().unwrap();
+    assert_eq!(right_id, id.at_offset(2));
+    let right = doc.store.get(&right_id).unwrap();
+    assert_eq!(right.len, 3, "right half keeps remaining length");
+    assert!(right.is_deleted && right.is_empty());
+}
+
+#[test]
+fn collect_garbage_unlinks_confirmed_tombstones_and_is_idempotent() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap();
+
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+
+    let first = doc.collect_garbage(&confirmed).unwrap();
+    assert!(
+        first.is_empty(),
+        "GC of an already-applied local delete emits no UI changes"
+    );
+    assert!(
+        doc.store.get(&block_id(1, 0)).is_none(),
+        "confirmed tombstone is removed from the store"
+    );
+    assert_eq!(doc.get_text(), " world");
+    assert_eq!(doc.head, Some(block_id(1, 5)));
+
+    let second = doc.collect_garbage(&confirmed).unwrap();
+    assert!(second.is_empty());
+    assert_eq!(doc.get_text(), " world");
+    assert!(doc.to_snapshot().delete_set.is_empty());
+}
+
+#[test]
+fn collect_garbage_below_unlinks_only_deleted_blocks_below_floor() {
+    use crate::store::StateVector;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "abcdefghij").unwrap();
+    doc.delete(2, 3).unwrap(); // [2,5)
+    doc.delete(4, 2).unwrap(); // visible positions after first delete -> [7,9)
+
+    let mut floor = StateVector::new();
+    floor.update(ClientId::new(1), 7);
+    doc.collect_garbage_below(&floor).unwrap();
+
+    let live = doc.store.get(&block_id(1, 0)).unwrap();
+    assert!(!live.is_deleted);
+    assert_eq!(live.content(), "ab");
+    assert_eq!(live.right(), Some(block_id(1, 5)));
+
+    assert!(
+        doc.store.get(&block_id(1, 2)).is_none(),
+        "deleted block below the floor is unlinked"
+    );
+
+    let above_floor_deleted = doc.store.get(&block_id(1, 7)).unwrap();
+    assert!(above_floor_deleted.is_deleted);
+    assert_eq!(above_floor_deleted.content(), "hi");
+    assert_eq!(doc.get_text(), "abfgj");
+}
+
+#[test]
+fn collect_garbage_below_prunes_delete_metadata_prefix() {
+    use crate::store::StateVector;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "abcdef").unwrap();
+    doc.delete(1, 4).unwrap(); // [1,5)
+
+    let mut floor = StateVector::new();
+    floor.update(ClientId::new(1), 3);
+    doc.collect_garbage_below(&floor).unwrap();
+
+    let snap = doc.to_snapshot();
+    let remaining: Vec<_> = snap
+        .delete_set
+        .iter()
+        .map(|(client, range)| (client.value, range.start, range.len))
+        .collect();
+    assert_eq!(remaining, vec![(1, 3, 2)]);
+}
+
+#[test]
+fn collect_garbage_below_is_idempotent() {
+    use crate::store::StateVector;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello").unwrap();
+    doc.delete(0, 5).unwrap();
+
+    let mut floor = StateVector::new();
+    floor.update(ClientId::new(1), 5);
+    doc.collect_garbage_below(&floor).unwrap();
+    doc.collect_garbage_below(&floor).unwrap();
+
+    assert!(doc.store.get(&block_id(1, 0)).is_none());
+    assert_eq!(doc.head, None);
+    assert_eq!(doc.get_text(), "");
+    assert!(doc.to_snapshot().delete_set.is_empty());
+}
+
+#[test]
+fn snapshot_roundtrip_after_gc_omits_unlinked_tombstone() {
+    use crate::snapshot::Snapshot;
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello world").unwrap();
+    doc.delete(0, 5).unwrap();
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+    doc.collect_garbage(&confirmed).unwrap();
+    assert_eq!(doc.get_text(), " world");
+
+    let snap = Snapshot::decode(&doc.to_snapshot().encode()).unwrap();
+    let mut joiner = Document::from_snapshot(snap);
+
+    assert_eq!(
+        joiner.get_text(),
+        " world",
+        "unlinked tombstone must not break traversal on a restored doc"
+    );
+    assert!(joiner.store.get(&block_id(1, 0)).is_none());
+
+    let x = Block::new(
+        BlockId::new(ClientId::new(2), Clock::new(0)),
+        Some(block_id(1, 1)),
+        None,
+        "X".to_string(),
+    );
+    let changes = joiner.remote_insert(x).unwrap();
+    assert!(
+        changes.is_empty(),
+        "an insert anchored to a physically removed tombstone remains pending"
+    );
+    assert_eq!(joiner.get_text(), " world");
+}
+
+#[test]
+fn remote_insert_with_origin_inside_unlinked_block_stays_pending() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(99));
+
+    doc.remote_insert(Block::new(block_id(1, 0), None, None, "abcde".to_string()))
+        .unwrap();
+    assert_eq!(doc.get_text(), "abcde");
+
+    let mut ds = DeleteSet::new();
+    ds.add(block_id(1, 0), 5);
+    doc.apply_delete_set(&ds).unwrap();
+    doc.collect_garbage(&ds).unwrap();
+    assert!(doc.store.get(&block_id(1, 0)).is_none());
+
+    // origin_left = (1,1): interior of the unlinked block
+    let x = Block::new(
+        BlockId::new(ClientId::new(2), Clock::new(0)),
+        Some(block_id(1, 1)),
+        None,
+        "X".to_string(),
+    );
+    let changes = doc.remote_insert(x).unwrap();
+
+    assert_eq!(doc.get_text(), "");
+    assert!(changes.is_empty());
+}
+
+#[test]
+fn duplicate_delete_for_unlinked_seen_range_is_not_buffered() {
+    use crate::store::DeleteSet;
+
+    let mut doc = Document::new(ClientId::new(1));
+    doc.local_insert(0, "hello").unwrap();
+    doc.delete(0, 5).unwrap();
+
+    let mut confirmed = DeleteSet::new();
+    confirmed.add(block_id(1, 0), 5);
+    doc.collect_garbage(&confirmed).unwrap();
+
+    let changes = doc.apply_delete_set(&confirmed).unwrap();
+
+    assert!(changes.is_empty());
+    assert_eq!(doc.pending_delete_set_count(), 0);
+}
