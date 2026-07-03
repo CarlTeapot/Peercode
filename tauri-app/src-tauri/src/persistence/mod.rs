@@ -67,8 +67,8 @@ pub struct DocumentMeta {
 }
 
 pub use io::{
-    doc_path, documents_dir, list_documents, load_document, load_named, migrate_legacy_documents,
-    save_named, save_snapshot, save_snapshot_named,
+    doc_path, documents_dir, list_documents, load_document, load_named, save_named, save_snapshot,
+    save_snapshot_named,
 };
 pub use recents::record_recent;
 pub use text_import::{read_text_for_import, IMPORT_CHUNK_CHARS};

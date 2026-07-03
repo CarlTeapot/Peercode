@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crdt_core::{Document, Snapshot};
-use log::{info, warn};
 use tauri::{AppHandle, Manager};
 
 use super::{recents, DocumentMeta, PersistError, FILE_EXTENSION, FORMAT_VERSION, MAGIC};
@@ -46,61 +45,16 @@ fn is_valid_name(name: &str) -> bool {
 pub fn documents_dir(app: &AppHandle) -> Result<PathBuf, PersistError> {
     match app.path().document_dir() {
         Ok(docs) => Ok(docs.join("PeerCode")),
-        Err(_) => legacy_documents_dir(app),
+        Err(_) => fallback_documents_dir(app),
     }
 }
 
-/// Pre-migration library location, hidden inside the app-data dir.
-fn legacy_documents_dir(app: &AppHandle) -> Result<PathBuf, PersistError> {
+fn fallback_documents_dir(app: &AppHandle) -> Result<PathBuf, PersistError> {
     let base = app
         .path()
         .app_data_dir()
         .map_err(|e| PersistError::Io(std::io::Error::other(e.to_string())))?;
     Ok(base.join("documents"))
-}
-
-/// One time migratin
-pub fn migrate_legacy_documents(app: &AppHandle) -> Result<(), PersistError> {
-    let legacy = legacy_documents_dir(app)?;
-    let target = documents_dir(app)?;
-    if legacy == target {
-        return Ok(());
-    }
-
-    let iter = match fs::read_dir(&legacy) {
-        Ok(it) => it,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(e) => return Err(e.into()),
-    };
-
-    let mut migrated = 0usize;
-    for entry in iter {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some(FILE_EXTENSION) {
-            continue;
-        }
-        let Some(file_name) = path.file_name() else {
-            continue;
-        };
-        let dest = target.join(file_name);
-        if dest.exists() {
-            continue;
-        }
-        fs::create_dir_all(&target)?;
-        match fs::copy(&path, &dest) {
-            Ok(_) => migrated += 1,
-            Err(e) => warn!("failed to migrate {}: {e}", path.display()),
-        }
-    }
-    if migrated > 0 {
-        info!(
-            "migrated {migrated} document(s) from {} to {}",
-            legacy.display(),
-            target.display()
-        );
-    }
-    Ok(())
 }
 
 pub fn doc_path(app: &AppHandle, name: &str) -> Result<PathBuf, PersistError> {

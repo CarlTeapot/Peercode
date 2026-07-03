@@ -67,10 +67,6 @@ pub fn run() {
                 debug!("debug linked-list logger spawned");
             }
 
-            if let Err(e) = persistence::migrate_legacy_documents(app.handle()) {
-                warn!("legacy document migration failed: {e}");
-            }
-
             info!("tauri setup completed");
             Ok(())
         })
