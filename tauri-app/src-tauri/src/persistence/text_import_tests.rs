@@ -55,6 +55,12 @@ fn rejects_non_utf8_content() {
 }
 
 #[test]
+fn normalizes_crlf_and_cr_to_lf() {
+    let file = TempFile::new(b"one\r\ntwo\rthree\n");
+    assert_eq!(read_text_for_import(&file.0).unwrap(), "one\ntwo\nthree\n");
+}
+
+#[test]
 fn missing_file_is_an_io_error() {
     let path = std::env::temp_dir().join("peercode-import-test-does-not-exist");
     assert!(matches!(

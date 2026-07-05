@@ -78,26 +78,41 @@ function AppContent({ username }: AppContentProps) {
     [enqueueOp],
   );
 
-  const handleDocumentLoaded = useCallback((text: string, name: string) => {
+  // Replaces the whole editor content without echoing ops back to the
+  // backend. Normalizes to LF and re-pins the model EOL: on Windows,
+  // setValue re-infers CRLF from the text, which would shift every offset
+  // relative to peers.
+  const replaceEditorText = useCallback((text: string) => {
+    const normalized = normalizeToLF(text);
     const ed = editorRef.current;
     if (ed) {
       isApplyingRemote.current = true;
-      ed.setValue(text);
-      forceModelLF(ed, monacoRef.current);
-      isApplyingRemote.current = false;
-      shadowTextRef.current = text;
+      try {
+        ed.setValue(normalized);
+        forceModelLF(ed, monacoRef.current);
+      } finally {
+        isApplyingRemote.current = false;
+      }
     }
-    const count = ++eventCountRef.current;
-    setEventLog((prev) => [
-      ...prev,
-      {
-        id: count,
-        operationClass: "op-insert",
-        operationLabel: "[loaded]",
-        payload: `document "${name}" (${text.length} chars)`,
-      },
-    ]);
+    shadowTextRef.current = normalized;
   }, []);
+
+  const handleDocumentLoaded = useCallback(
+    (text: string, name: string) => {
+      replaceEditorText(text);
+      const count = ++eventCountRef.current;
+      setEventLog((prev) => [
+        ...prev,
+        {
+          id: count,
+          operationClass: "op-insert",
+          operationLabel: "[loaded]",
+          payload: `document "${name}" (${text.length} chars)`,
+        },
+      ]);
+    },
+    [replaceEditorText],
+  );
 
   const getEditorContent = useCallback(
     () => editorRef.current?.getValue() ?? "",
@@ -106,15 +121,8 @@ function AppContent({ username }: AppContentProps) {
 
   const resetDocAndEditor = useCallback(async () => {
     await invoke("reset_document");
-    isApplyingRemote.current = true;
-    const ed = editorRef.current;
-    if (ed) {
-      ed.setValue("");
-      forceModelLF(ed, monacoRef.current);
-    }
-    isApplyingRemote.current = false;
-    shadowTextRef.current = "";
-  }, []);
+    replaceEditorText("");
+  }, [replaceEditorText]);
 
   useEffect(() => {
     if (logRef.current) {
