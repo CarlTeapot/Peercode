@@ -10,13 +10,17 @@ use tauri::async_runtime::JoinHandle;
 
 pub use crate::state::app_role::AppRole;
 
+#[derive(Clone)]
+pub struct CurrentFile {
+    pub path: std::path::PathBuf,
+    pub had_crlf: bool,
+}
+
 pub struct AppState {
     pub doc_tx: DocSender,
     pub(crate) role: Mutex<AppRole>,
     pub processes: Mutex<HostProcesses>,
-    pub current_document_name: Mutex<Option<String>>,
-    pub current_document_path: Mutex<Option<std::path::PathBuf>>,
-    pub current_export_path: Mutex<Option<std::path::PathBuf>>,
+    pub current_file: Mutex<Option<CurrentFile>>,
     pub sync_maintenance: SyncMaintenance,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
@@ -68,9 +72,7 @@ impl AppState {
                 gateway_metrics_task: None,
                 tunnel_metrics_task: None,
             }),
-            current_document_name: Mutex::new(None),
-            current_document_path: Mutex::new(None),
-            current_export_path: Mutex::new(None),
+            current_file: Mutex::new(None),
             sync_maintenance: SyncMaintenance::new(),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
