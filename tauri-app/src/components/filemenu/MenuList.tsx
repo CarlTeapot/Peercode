@@ -1,7 +1,5 @@
 import type { ComponentType, SVGProps } from "react";
 import {
-  IconExport,
-  IconFolderDown,
   IconFolderOpen,
   IconFork,
   IconList,
@@ -39,14 +37,10 @@ function MenuItem({
 
 interface MenuListProps {
   currentName: string | null;
-  exportFileName: string | null;
   busy: boolean;
   onSave: () => void;
   onSaveAs: () => void;
-  onSaveTo: () => void;
-  onExportLinked: () => void;
-  onExportAs: () => void;
-  onOpenLibrary: () => void;
+  onOpenRecents: () => void;
   onOpenFrom: () => void;
   onFork: () => void;
 }
@@ -59,7 +53,7 @@ export function MenuList(props: MenuListProps) {
       <MenuItem
         icon={IconSave}
         label="Save"
-        detail={props.currentName ?? undefined}
+        detail={props.currentName ?? "untitled"}
         disabled={busy}
         onClick={props.onSave}
       />
@@ -69,36 +63,13 @@ export function MenuList(props: MenuListProps) {
         disabled={busy}
         onClick={props.onSaveAs}
       />
-      <MenuItem
-        icon={IconFolderDown}
-        label="Save to…"
-        disabled={busy}
-        onClick={props.onSaveTo}
-      />
-      <div className="file-dropdown-separator" />
-      <div className="file-dropdown-section">Export</div>
-      {props.exportFileName && (
-        <MenuItem
-          icon={IconExport}
-          label="Export to"
-          detail={props.exportFileName}
-          disabled={busy}
-          onClick={props.onExportLinked}
-        />
-      )}
-      <MenuItem
-        icon={IconExport}
-        label="Export as…"
-        disabled={busy}
-        onClick={props.onExportAs}
-      />
       <div className="file-dropdown-separator" />
       <div className="file-dropdown-section">Open</div>
       <MenuItem
         icon={IconList}
         label="Open…"
         disabled={busy}
-        onClick={props.onOpenLibrary}
+        onClick={props.onOpenRecents}
       />
       <MenuItem
         icon={IconFolderOpen}
@@ -108,7 +79,7 @@ export function MenuList(props: MenuListProps) {
       />
       <MenuItem
         icon={IconFork}
-        label="Fork…"
+        label="Fork"
         disabled={busy}
         onClick={props.onFork}
       />

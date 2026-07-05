@@ -3,33 +3,17 @@ export interface DocumentMeta {
   path: string;
   size_bytes: number;
   modified: number | null;
-  external: boolean;
 }
 
-// Save dialogs list pcdoc first so it drives the suggested extension.
-export const SAVE_FILTERS = [
-  { name: "PeerCode documents", extensions: ["pcdoc"] },
-  { name: "All files", extensions: ["*"] },
-];
-
-// The open dialog deliberately has NO filters: any readable file can be
-// imported, and platform dialogs default to the first filter, hiding
-// everything else behind a dropdown (GTK additionally treats "*" as "*.*",
-// which misses extensionless files).
-
-export const EXPORT_FILTERS = [
-  { name: "All files", extensions: ["*"] },
-  { name: "Text files", extensions: ["txt"] },
-];
-
-export function isPcdoc(path: string): boolean {
-  return path.toLowerCase().endsWith(".pcdoc");
+export interface CurrentFileInfo {
+  name: string;
+  path: string;
 }
 
-export function fileName(path: string): string {
-  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
-}
+// Open and save dialogs deliberately have NO filters: any readable file can
+// be opened or saved under any name, and platform dialogs default to the
+// first filter, hiding everything else behind a dropdown (GTK additionally
+// treats "*" as "*.*", which misses extensionless files).
 
 export function parentFolder(path: string): string {
   const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));

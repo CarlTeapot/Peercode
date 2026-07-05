@@ -6,34 +6,23 @@ import {
 } from "./format";
 import { IconReveal, IconTrash } from "./icons";
 
-interface DocumentRowProps {
+interface RecentRowProps {
   doc: DocumentMeta;
   busy: boolean;
-  onOpen: (doc: DocumentMeta) => void;
+  onOpen: (path: string) => void;
   onReveal: (path: string) => void;
-  onDelete: (name: string) => void;
+  onRemove: (path: string) => void;
 }
 
-function DocumentRow({
-  doc,
-  busy,
-  onOpen,
-  onReveal,
-  onDelete,
-}: DocumentRowProps) {
+function RecentRow({ doc, busy, onOpen, onReveal, onRemove }: RecentRowProps) {
   return (
     <div className="file-dropdown-doc">
       <button
         className="file-dropdown-doc-name"
-        onClick={() => onOpen(doc)}
+        onClick={() => onOpen(doc.path)}
         disabled={busy}
       >
-        <span>
-          {doc.name}
-          {doc.external && (
-            <span className="file-dropdown-doc-badge">external</span>
-          )}
-        </span>
+        <span>{doc.name}</span>
         <span className="file-dropdown-doc-meta">
           {formatSize(doc.size_bytes)} · {formatDate(doc.modified)}
         </span>
@@ -49,51 +38,45 @@ function DocumentRow({
       >
         <IconReveal />
       </button>
-      {!doc.external && (
-        <button
-          className="file-dropdown-doc-action danger"
-          onClick={() => onDelete(doc.name)}
-          disabled={busy}
-          title="Delete"
-        >
-          <IconTrash />
-        </button>
-      )}
+      <button
+        className="file-dropdown-doc-action"
+        onClick={() => onRemove(doc.path)}
+        disabled={busy}
+        title="Remove from list (keeps the file)"
+      >
+        <IconTrash />
+      </button>
     </div>
   );
 }
 
-interface DocumentListProps {
-  docs: DocumentMeta[];
-  docsDir: string | null;
+interface RecentsListProps {
+  recents: DocumentMeta[];
   busy: boolean;
-  onOpen: (doc: DocumentMeta) => void;
+  onOpen: (path: string) => void;
   onReveal: (path: string) => void;
-  onDelete: (name: string) => void;
+  onRemove: (path: string) => void;
   onBack: () => void;
 }
 
-export function DocumentList(props: DocumentListProps) {
+export function RecentsList(props: RecentsListProps) {
   return (
     <div className="file-dropdown-form">
-      <div className="file-dropdown-title">Open document</div>
-      {props.docsDir && (
-        <div className="file-dropdown-subtitle" title={props.docsDir}>
-          Library: {props.docsDir}
+      <div className="file-dropdown-title">Recent files</div>
+      {props.recents.length === 0 ? (
+        <div className="file-dropdown-subtitle">
+          Nothing opened yet. Use Open from… to browse.
         </div>
-      )}
-      {props.docs.length === 0 ? (
-        <div className="file-dropdown-subtitle">No saved documents yet.</div>
       ) : (
         <div className="file-dropdown-list">
-          {props.docs.map((d) => (
-            <DocumentRow
+          {props.recents.map((d) => (
+            <RecentRow
               key={d.path}
               doc={d}
               busy={props.busy}
               onOpen={props.onOpen}
               onReveal={props.onReveal}
-              onDelete={props.onDelete}
+              onRemove={props.onRemove}
             />
           ))}
         </div>

@@ -71,6 +71,8 @@ function AppContent({ username }: AppContentProps) {
   const lastAppliedSeqRef = useRef(0);
   const shadowTextRef = useRef("");
   const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const [dirty, setDirty] = useState(false);
+  const markDirty = useCallback(() => setDirty(true), []);
 
   const enqueueOp = useMemo(() => createEnqueueOp(opChainRef), []);
   const { sendInsert, sendDelete, sendReplace } = useMemo(
@@ -95,6 +97,7 @@ function AppContent({ username }: AppContentProps) {
       }
     }
     shadowTextRef.current = normalized;
+    setDirty(false);
   }, []);
 
   const handleDocumentLoaded = useCallback(
@@ -138,6 +141,7 @@ function AppContent({ username }: AppContentProps) {
     setEventLog,
     lastAppliedSeqRef,
     shadowTextRef,
+    onDocChanged: markDirty,
   });
 
   useSnapshotListener({
@@ -248,7 +252,11 @@ function AppContent({ username }: AppContentProps) {
         <span className="toolbar-brand">
           Peer<span className="toolbar-brand-accent">Code</span>
         </span>
-        <FileMenu onDocumentLoaded={handleDocumentLoaded} />
+        <FileMenu
+          onDocumentLoaded={handleDocumentLoaded}
+          dirty={dirty}
+          onSaved={() => setDirty(false)}
+        />
         {username && <span className="toolbar-username">{username}</span>}
         {isDevFeaturesEnabled && (
           <button

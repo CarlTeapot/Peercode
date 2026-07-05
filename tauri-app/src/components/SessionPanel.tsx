@@ -99,14 +99,10 @@ export function SessionPanel({
     }
   }, [getEditorContent, startJoin]);
 
-  const handleSaveAndContinue = useCallback(
-    async (name: string) => {
-      await invoke("save_document", { name });
-      setShowSavePrompt(false);
-      await startJoin();
-    },
-    [startJoin],
-  );
+  const handleSaveAndContinue = useCallback(async () => {
+    setShowSavePrompt(false);
+    await startJoin();
+  }, [startJoin]);
 
   const handleDiscardAndContinue = useCallback(() => {
     setShowSavePrompt(false);
@@ -284,7 +280,7 @@ export function SessionPanel({
       )}
       {showSavePrompt && (
         <SaveBeforeSessionModal
-          onSaveAndContinue={handleSaveAndContinue}
+          onSaved={() => void handleSaveAndContinue()}
           onDiscardAndContinue={handleDiscardAndContinue}
           onCancel={() => setShowSavePrompt(false)}
         />

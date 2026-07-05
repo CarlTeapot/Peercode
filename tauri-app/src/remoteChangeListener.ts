@@ -37,6 +37,8 @@ interface UseRemoteChangeListenerArgs {
   setEventLog: Dispatch<SetStateAction<LogEntry[]>>;
   lastAppliedSeqRef: MutableRefObject<number>;
   shadowTextRef: MutableRefObject<string>;
+  /** Called once per applied change; feeds the unsaved-changes indicator. */
+  onDocChanged: () => void;
 }
 
 export function useRemoteChangeListener({
@@ -47,6 +49,7 @@ export function useRemoteChangeListener({
   setEventLog,
   lastAppliedSeqRef,
   shadowTextRef,
+  onDocChanged,
 }: UseRemoteChangeListenerArgs) {
   useEffect(() => {
     const unlistens: Array<() => void> = [];
@@ -130,6 +133,7 @@ export function useRemoteChangeListener({
           lastAppliedSeqRef.current = change.seq;
         }
         isApplyingRemote.current = false;
+        onDocChanged();
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -150,5 +154,6 @@ export function useRemoteChangeListener({
     setEventLog,
     lastAppliedSeqRef,
     shadowTextRef,
+    onDocChanged,
   ]);
 }

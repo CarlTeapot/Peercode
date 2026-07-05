@@ -1,15 +1,16 @@
 import { useEffect, useRef } from "react";
-import { DocumentList } from "./DocumentList";
 import { MenuList } from "./MenuList";
-import { NameForm } from "./NameForm";
+import { RecentsList } from "./RecentsList";
 import { useFileMenu } from "./useFileMenu";
 
 interface FileMenuProps {
   onDocumentLoaded: (text: string, name: string) => void;
+  dirty: boolean;
+  onSaved: () => void;
 }
 
-export function FileMenu({ onDocumentLoaded }: FileMenuProps) {
-  const menu = useFileMenu(onDocumentLoaded);
+export function FileMenu({ onDocumentLoaded, dirty, onSaved }: FileMenuProps) {
+  const menu = useFileMenu(onDocumentLoaded, onSaved);
   const menuRef = useRef<HTMLDivElement>(null);
   const { open, closeMenu } = menu;
 
@@ -28,8 +29,13 @@ export function FileMenu({ onDocumentLoaded }: FileMenuProps) {
     <div ref={menuRef} className="file-menu">
       <button onClick={() => void menu.toggleMenu()} className="file-menu-btn">
         File
-        {menu.currentName && (
-          <span className="file-menu-current">{menu.currentName}</span>
+        {menu.current && (
+          <span className="file-menu-current">{menu.current.name}</span>
+        )}
+        {dirty && (
+          <span className="file-menu-dirty" title="Unsaved changes">
+            ●
+          </span>
         )}
       </button>
 
@@ -37,60 +43,23 @@ export function FileMenu({ onDocumentLoaded }: FileMenuProps) {
         <div className="file-dropdown">
           {menu.view === "menu" && (
             <MenuList
-              currentName={menu.currentName}
-              exportFileName={menu.exportFileName}
+              currentName={menu.current?.name ?? null}
               busy={menu.busy}
               onSave={() => void menu.saveCurrent()}
-              onSaveAs={() => menu.showView("save", menu.currentName || "")}
-              onSaveTo={() => void menu.saveTo()}
-              onExportLinked={() => void menu.exportToLinked()}
-              onExportAs={() => void menu.exportAs()}
-              onOpenLibrary={() => menu.showView("load")}
+              onSaveAs={() => void menu.saveAs()}
+              onOpenRecents={() => menu.showView("recents")}
               onOpenFrom={() => void menu.openFrom()}
-              onFork={() =>
-                menu.showView(
-                  "fork",
-                  menu.currentName ? menu.currentName + "-fork" : "fork",
-                )
-              }
+              onFork={() => void menu.fork()}
             />
           )}
 
-          {menu.view === "save" && (
-            <NameForm
-              title="Save as"
-              submitLabel="Save"
-              busyLabel="Saving…"
+          {menu.view === "recents" && (
+            <RecentsList
+              recents={menu.recents}
               busy={menu.busy}
-              value={menu.inputValue}
-              onChange={menu.setInputValue}
-              onSubmit={() => void menu.saveAs()}
-              onBack={() => menu.showView("menu")}
-            />
-          )}
-
-          {menu.view === "fork" && (
-            <NameForm
-              title="Fork document"
-              subtitle="Creates an independent copy with a new identity."
-              submitLabel="Fork"
-              busyLabel="Forking…"
-              busy={menu.busy}
-              value={menu.inputValue}
-              onChange={menu.setInputValue}
-              onSubmit={() => void menu.fork()}
-              onBack={() => menu.showView("menu")}
-            />
-          )}
-
-          {menu.view === "load" && (
-            <DocumentList
-              docs={menu.docs}
-              docsDir={menu.docsDir}
-              busy={menu.busy}
-              onOpen={(doc) => void menu.openPath(doc.path)}
+              onOpen={(path) => void menu.openPath(path)}
               onReveal={(path) => void menu.reveal(path)}
-              onDelete={(name) => void menu.deleteDoc(name)}
+              onRemove={(path) => void menu.removeRecent(path)}
               onBack={() => menu.showView("menu")}
             />
           )}

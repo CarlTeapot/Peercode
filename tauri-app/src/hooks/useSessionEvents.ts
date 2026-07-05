@@ -170,7 +170,6 @@ export function useSessionEvents() {
     sessionStatus,
     setSessionStatus,
     lanUrl,
-    setLanUrl,
     publicUrl,
     setPublicUrl,
     processesRunning,

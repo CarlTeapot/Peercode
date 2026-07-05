@@ -38,31 +38,11 @@ export function IconSaveAs(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function IconFolderDown(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Svg {...props}>
-      <path d="M20 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z" />
-      <path d="M12 10v6" />
-      <path d="m9 13.5 3 3 3-3" />
-    </Svg>
-  );
-}
-
 export function IconFolderOpen(props: SVGProps<SVGSVGElement>) {
   return (
     <Svg {...props}>
       <path d="M6 14 4 20h15.5a1.5 1.5 0 0 0 1.4-1L23 13a1 1 0 0 0-1-1.3H8a2 2 0 0 0-2 1.3z" />
       <path d="M4 20V5a2 2 0 0 1 2-2h4l2 3h7a2 2 0 0 1 2 2v3.7" />
-    </Svg>
-  );
-}
-
-export function IconExport(props: SVGProps<SVGSVGElement>) {
-  return (
-    <Svg {...props}>
-      <path d="M12 15V3" />
-      <path d="m7 8 5-5 5 5" />
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     </Svg>
   );
 }
