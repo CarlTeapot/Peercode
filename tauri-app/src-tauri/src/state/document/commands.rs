@@ -9,6 +9,17 @@ use crate::state::document::client::request_fallible;
 use crate::state::document::types::DocOp;
 use crate::state::ws_state::WsState;
 
+/// The CRDT must never contain `\r`: positions on the wire are offsets into
+/// LF-only text, so a stray `\r\n` would shift every later position by one
+/// per newline. The frontend already normalizes; this is the final guard.
+fn normalize_to_lf(content: String) -> String {
+    if content.contains('\r') {
+        content.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        content
+    }
+}
+
 #[tauri::command]
 pub async fn insert(
     state: State<'_, AppState>,
@@ -17,6 +28,7 @@ pub async fn insert(
     content: String,
     base_seq: u64,
 ) -> Result<(), String> {
+    let content = normalize_to_lf(content);
     debug!(
         "crdt insert request: position={}, content_len={}, base_seq={}",
         position,
@@ -87,6 +99,7 @@ pub async fn replace(
     content: String,
     base_seq: u64,
 ) -> Result<(), String> {
+    let content = normalize_to_lf(content);
     debug!(
         "crdt replace request: position={}, delete_length={}, content_len={}, base_seq={}",
         position,
@@ -122,6 +135,22 @@ pub async fn replace(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_to_lf;
+
+    #[test]
+    fn normalize_to_lf_converts_crlf_and_bare_cr() {
+        assert_eq!(normalize_to_lf("a\r\nb\rc\nd".into()), "a\nb\nc\nd");
+    }
+
+    #[test]
+    fn normalize_to_lf_leaves_lf_only_text_untouched() {
+        assert_eq!(normalize_to_lf("a\nb\nc".into()), "a\nb\nc");
+        assert_eq!(normalize_to_lf(String::new()), "");
+    }
 }
 
 #[cfg(debug_assertions)]
