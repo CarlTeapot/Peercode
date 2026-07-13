@@ -1,0 +1,14 @@
+# cargo-audit configuration for the tauri-app crate.
+
+[advisories]
+# quick-xml DoS advisories (quadratic attribute check / unbounded namespace
+# allocation). quick-xml is a transitive dependency via plist -> tauri-utils,
+# which parses developer-authored Apple plist files (bundle configuration),
+# never attacker-controlled XML at runtime. plist 1.9.0 (latest) still pins
+# quick-xml ^0.39, so no upgrade path exists yet. Remove these ignores once a
+# plist release depends on quick-xml >= 0.41 and `cargo update -p plist`
+# clears them.
+ignore = [
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

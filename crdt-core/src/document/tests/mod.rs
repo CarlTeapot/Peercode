@@ -4,6 +4,7 @@ use crate::structs::Block;
 use crate::types::{BlockId, ClientId, Clock};
 use crate::wire::WireBlock;
 
+mod from_text;
 mod sync_invariant;
 
 fn block_id(client: u64, clock: u64) -> BlockId {

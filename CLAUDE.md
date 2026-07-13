@@ -125,6 +125,19 @@ All session lifecycle transitions go through `AppState` — see `.claude/rules/s
 
 When the host window is destroyed (see `on_window_event` in `lib.rs`), `destroy_room` and `kill_host_processes` run synchronously to avoid leaving orphaned sidecars.
 
+### Persistence (file open/save)
+
+`tauri-app/src-tauri/src/persistence/` saves and opens files at user-chosen paths (native dialogs on the frontend, no app-managed library):
+
+- **Two on-disk formats, chosen by extension on save.** A `.pcdoc` file is `PCDC` magic + one version byte + a bitcode-encoded CRDT `Snapshot` (constants in `persistence/mod.rs`, encode/decode in `pcdoc.rs`); any other extension saves the document's plain text. On open the format is sniffed by magic bytes, not extension: `read.rs::read_file` returns `FileContent::Pcdoc(Document)` or `FileContent::Text`, rejecting non-UTF-8 and files over `MAX_OPEN_BYTES` (10 MB).
+- **Line endings.** Opened text is normalized to LF (Monaco, CRDT positions, and cross-platform peers all assume it); whether the file had CRLF is remembered in `CurrentFile.had_crlf` and re-applied on save (`write.rs`) so Windows files round-trip byte-identical.
+- **Text → CRDT.** Non-pcdoc files become a document via `Document::from_text_chunked` (`crdt-core/src/document/from_text.rs`), splitting into blocks of `OPEN_CHUNK_CHARS` (64) chars.
+- **All writes are atomic** — sibling `*.tmp` + rename (`atomic.rs`), with a remove-then-rename fallback for Windows.
+- **`CurrentFile`** (`state/appstate.rs`: path + `had_crlf`, `None` = untitled buffer) is the single source of truth for "where does Save go". `save_file` errors on an untitled buffer and the frontend falls through to the Save-As dialog (`components/filemenu/saveFlow.ts`).
+- **Recents, not a library.** `recents.rs` keeps a max-50 MRU list of paths in `recent.json` under the app-data dir; dead paths are pruned on listing. `paths.rs::documents_dir` (`~/Documents/PeerCode`) is only the default dialog location.
+- **Frontend** lives in `src/components/filemenu/`: `useFileMenu.ts` holds all state/actions, the `.tsx` views are render-only. Dialogs deliberately have no file-type filters (see the comment in `format.ts`). Ctrl/Cmd+S is a capture-phase window `keydown` listener registered inside `useFileMenu` (it must `preventDefault` before the webview's own save-page handling); add further app-wide shortcuts there, not in Monaco keybindings.
+- The glob `pub use`s in `persistence/commands/mod.rs` are load-bearing: `#[tauri::command]` generates hidden `__cmd__*` items that `generate_handler!` in `lib.rs` resolves through that module path.
+
 ## Conventions worth knowing
 
 - **`pre-push` hook runs `make check`** (format-all + lint-all). Install with `make install-git-hooks`. CI runs the same checks plus tests and security audits (`cargo audit`, `npm audit`, `govulncheck`).

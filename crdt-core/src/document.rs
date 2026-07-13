@@ -5,6 +5,7 @@ use crate::types::{BlockId, ClientId};
 
 #[cfg(debug_assertions)]
 mod debug;
+mod from_text;
 mod integrate;
 mod ops;
 mod pending;
