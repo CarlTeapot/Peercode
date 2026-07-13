@@ -6,6 +6,7 @@ mod save;
 mod tests;
 
 use crate::state::appstate::{AppState, CurrentFile};
+use crdt_core::Document;
 
 pub use document_ops::*;
 pub use open::*;
@@ -20,4 +21,19 @@ fn name_from_path(path: &std::path::Path) -> String {
     path.file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "untitled".to_string())
+}
+
+fn rebuild_if_crlf(doc: Document) -> Result<(Document, String), String> {
+    let text = doc.get_text();
+    if !text.contains('\r') {
+        return Ok((doc, text));
+    }
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let mut fresh = Document::new(doc.client_id);
+    if !normalized.is_empty() {
+        fresh
+            .local_insert(0, &normalized)
+            .map_err(|e| format!("failed to normalize legacy document: {e}"))?;
+    }
+    Ok((fresh, normalized))
 }

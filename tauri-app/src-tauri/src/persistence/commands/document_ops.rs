@@ -7,7 +7,7 @@ use tauri::State;
 use crate::state::appstate::AppState;
 use crate::state::document::{request, DocOp};
 
-use super::{name_from_path, set_current_file};
+use super::{name_from_path, rebuild_if_crlf, set_current_file};
 
 #[derive(Serialize)]
 pub struct CurrentFileInfo {
@@ -25,7 +25,7 @@ pub async fn fork_document(state: State<'_, AppState>) -> Result<String, String>
     snapshot.pending_delete_sets.clear();
 
     let forked = Document::from_snapshot(snapshot);
-    let text = forked.get_text();
+    let (forked, text) = rebuild_if_crlf(forked)?;
     request(&state.doc_tx, |reply| DocOp::DocumentReplace {
         doc: Box::new(forked),
         reply,

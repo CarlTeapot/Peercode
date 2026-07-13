@@ -7,7 +7,7 @@ use crate::persistence::{self, FileContent};
 use crate::state::appstate::{AppState, CurrentFile};
 use crate::state::document::{request, DocOp};
 
-use super::set_current_file;
+use super::{rebuild_if_crlf, set_current_file};
 
 /// Opens any readable file: .pcdoc natively, everything else as chunked text.
 #[tauri::command]
@@ -20,7 +20,10 @@ pub async fn open_file(
     let content = persistence::read_file(&path).map_err(|e| e.to_string())?;
 
     let (doc, had_crlf) = match content {
-        FileContent::Pcdoc(doc) => (doc, false),
+        FileContent::Pcdoc(doc) => {
+            let (doc, _) = rebuild_if_crlf(*doc)?;
+            (Box::new(doc), false)
+        }
         FileContent::Text { text, had_crlf } => {
             let client_id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
             let doc = Document::from_text_chunked(client_id, &text, persistence::OPEN_CHUNK_CHARS)
