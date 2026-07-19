@@ -37,8 +37,8 @@ func TestRoom_JoinLeaveTriggersOnEmpty(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	a := client.New("a", "room-1", nil)
-	b := client.New("b", "room-1", nil)
+	a := client.New("a", "room-1", "userA", nil)
+	b := client.New("b", "room-1", "userB", nil)
 	if err := r.Join(a); err != nil {
 		t.Fatalf("join a: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestRoom_SendToEmptyIsNoop(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	a := client.New("a", "room-2", nil)
+	a := client.New("a", "room-2", "userA", nil)
 	if err := r.Join(a); err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestRoom_DoubleLeaveIsSilent(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	a := client.New("a", "room-3", nil)
+	a := client.New("a", "room-3", "userA", nil)
 	if err := r.Join(a); err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -112,13 +112,13 @@ func TestRoom_JoinAfterCloseIsRejected(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	a := client.New("a", "room-4", nil)
+	a := client.New("a", "room-4", "userA", nil)
 	if err := r.Join(a); err != nil {
 		t.Fatalf("join: %v", err)
 	}
 	r.Leave(a, nil)
 
-	b := client.New("b", "room-4", nil)
+	b := client.New("b", "room-4", "userB", nil)
 	if err := r.Join(b); !errors.Is(err, ErrRoomClosed) {
 		t.Fatalf("Join on closed room: got %v, want ErrRoomClosed", err)
 	}
@@ -131,12 +131,12 @@ func TestRoom_SnapshotReplayToJoiner(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	host := client.New("host", "room-snap", nil)
+	host := client.New("host", "room-snap", "hostUser", nil)
 	if err := r.Join(host); err != nil {
 		t.Fatalf("join host: %v", err)
 	}
 
-	joiner := client.New("joiner", "room-snap", nil)
+	joiner := client.New("joiner", "room-snap", "joinerUser", nil)
 	if err := r.Join(joiner); err != nil {
 		t.Fatalf("join joiner: %v", err)
 	}
@@ -205,8 +205,8 @@ func TestRoom_DuplicateClientIDRejected(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	a := client.New("same", "room-dup", nil)
-	b := client.New("same", "room-dup", nil)
+	a := client.New("same", "room-dup", "dupUser", nil)
+	b := client.New("same", "room-dup", "dupUser", nil)
 	if err := r.Join(a); err != nil {
 		t.Fatalf("first join: %v", err)
 	}
@@ -218,16 +218,36 @@ func TestRoom_DuplicateClientIDRejected(t *testing.T) {
 	<-runDone
 }
 
+func containsFrame(frames [][]byte, want []byte) bool {
+	for _, f := range frames {
+		if bytes.Equal(f, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func mustEncodePeerInfo(t *testing.T, clientID uint64, isHost, canWrite bool, username string) []byte {
+	t.Helper()
+	frame, err := wire.EncodePeerInfoFrame(clientID, isHost, canWrite, username)
+	if err != nil {
+		t.Fatalf("EncodePeerInfoFrame: %v", err)
+	}
+	return frame
+}
+
 func TestRoom_JoinBroadcastsMembershipToExistingMembers(t *testing.T) {
 	r := New("room-membership-join", gatewaymetrics.New())
-	host := client.New("1", "room-membership-join", nil)
-	guest := client.New("2", "room-membership-join", nil)
+	host := client.New("1", "room-membership-join", "hostname", nil)
+	guest := client.New("2", "room-membership-join", "guestname", nil)
 
 	if err := r.Join(host); err != nil {
 		t.Fatalf("join host: %v", err)
 	}
-	if got := drainFrames(host); len(got) != 0 {
-		t.Fatalf("first joiner received %d frames, want 0", len(got))
+	wantHostInfo := mustEncodePeerInfo(t, 1, true, true, "hostname")
+	hostRoster := drainFrames(host)
+	if len(hostRoster) != 1 || !bytes.Equal(hostRoster[0], wantHostInfo) {
+		t.Fatalf("first joiner roster = %x, want [%x]", hostRoster, wantHostInfo)
 	}
 
 	if err := r.Join(guest); err != nil {
@@ -235,23 +255,31 @@ func TestRoom_JoinBroadcastsMembershipToExistingMembers(t *testing.T) {
 	}
 
 	hostFrames := drainFrames(host)
-	if len(hostFrames) != 1 {
-		t.Fatalf("host received %d frames, want 1 (joined guest)", len(hostFrames))
+	if len(hostFrames) != 2 {
+		t.Fatalf("host received %d frames, want 2 (membership + peer-info for guest)", len(hostFrames))
 	}
-	want := wire.EncodeMembershipFrame(2, wire.MembershipJoined)
-	if !bytes.Equal(hostFrames[0], want) {
-		t.Fatalf("host received %x, want membership-joined for client 2 %x", hostFrames[0], want)
+	wantJoined := wire.EncodeMembershipFrame(2, wire.MembershipJoined)
+	if !bytes.Equal(hostFrames[0], wantJoined) {
+		t.Fatalf("host received %x, want membership-joined for client 2 %x", hostFrames[0], wantJoined)
+	}
+	wantGuestInfo := mustEncodePeerInfo(t, 2, false, false, "guestname")
+	if !bytes.Equal(hostFrames[1], wantGuestInfo) {
+		t.Fatalf("host received %x, want peer-info for guest %x", hostFrames[1], wantGuestInfo)
 	}
 
-	if got := drainFrames(guest); len(got) != 0 {
-		t.Fatalf("joiner received its own membership (%d frames), want 0", len(got))
+	guestRoster := drainFrames(guest)
+	if len(guestRoster) != 2 {
+		t.Fatalf("joiner received %d frames, want 2 (roster: host + self)", len(guestRoster))
+	}
+	if !containsFrame(guestRoster, wantHostInfo) || !containsFrame(guestRoster, wantGuestInfo) {
+		t.Fatalf("joiner roster %x missing host or self peer-info", guestRoster)
 	}
 }
 
 func TestRoom_LeaveBroadcastsMembershipToRemaining(t *testing.T) {
 	r := New("room-membership-leave", gatewaymetrics.New())
-	host := client.New("1", "room-membership-leave", nil)
-	guest := client.New("2", "room-membership-leave", nil)
+	host := client.New("1", "room-membership-leave", "hostname", nil)
+	guest := client.New("2", "room-membership-leave", "guestname", nil)
 	_ = r.Join(host)
 	_ = r.Join(guest)
 	_ = drainFrames(host) // discard joined(guest)
@@ -273,8 +301,8 @@ func TestRoom_NonNumericClientIDSkipsMembership(t *testing.T) {
 	// the fixed u64 membership layout, so the join/leave proceeds without membership
 	// rather than failing.
 	r := New("room-membership-nonnumeric", gatewaymetrics.New())
-	host := client.New("1", "room-membership-nonnumeric", nil)
-	weird := client.New("not-a-number", "room-membership-nonnumeric", nil)
+	host := client.New("1", "room-membership-nonnumeric", "hostname", nil)
+	weird := client.New("not-a-number", "room-membership-nonnumeric", "weird", nil)
 	_ = r.Join(host)
 	_ = drainFrames(host)
 
@@ -291,8 +319,8 @@ func TestRoom_GcCommitBroadcastsToPeers(t *testing.T) {
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	host := client.New("1", "room-gc", nil)
-	guest := client.New("2", "room-gc", nil)
+	host := client.New("1", "room-gc", "hostname", nil)
+	guest := client.New("2", "room-gc", "guestname", nil)
 	_ = r.Join(host)
 	_ = r.Join(guest)
 	_ = drainFrames(host)
@@ -315,13 +343,178 @@ func TestRoom_GcCommitBroadcastsToPeers(t *testing.T) {
 	<-runDone
 }
 
+func TestRoom_FirstJoinerBecomesHostGuestsReadOnlyByDefault(t *testing.T) {
+	r := New("room-roles", gatewaymetrics.New())
+	host := client.New("1", "room-roles", "hostname", nil)
+	guest := client.New("2", "room-roles", "guestname", nil)
+	if err := r.Join(host); err != nil {
+		t.Fatalf("join host: %v", err)
+	}
+	if err := r.Join(guest); err != nil {
+		t.Fatalf("join guest: %v", err)
+	}
+
+	if host.Role() != client.RoleHost {
+		t.Fatal("first joiner was not assigned RoleHost")
+	}
+	if guest.Role() != client.RoleGuest {
+		t.Fatal("second joiner was not assigned RoleGuest")
+	}
+	if !host.CanWrite() {
+		t.Fatal("host must always have write access")
+	}
+	if guest.CanWrite() {
+		t.Fatal("guest should be read-only when the host did not opt into default_can_write")
+	}
+}
+
+func TestRoom_HostDefaultCanWriteGrantsGuests(t *testing.T) {
+	r := New("room-default-write", gatewaymetrics.New())
+	host := client.New("1", "room-default-write", "hostname", nil)
+	host.HostDefaultCanWrite = true
+	guest := client.New("2", "room-default-write", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+
+	if !guest.CanWrite() {
+		t.Fatal("guest should inherit write access from the host's default_can_write")
+	}
+}
+
+func TestRoom_OpFromReadOnlyGuestIsDropped(t *testing.T) {
+	r := New("room-readonly-op", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-readonly-op", "hostname", nil)
+	guest := client.New("2", "room-readonly-op", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	op := []byte{wire.PrefixOp, 0xAA}
+	r.Ops() <- BroadcastMsg{Sender: guest, Data: op}
+
+	select {
+	case f := <-host.SendChan():
+		t.Fatalf("host received op %x from read-only guest, want drop", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
+func TestRoom_PermissionChangeGrantsWriteAndBroadcasts(t *testing.T) {
+	r := New("room-perm-grant", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-perm-grant", "hostname", nil)
+	guest := client.New("2", "room-perm-grant", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	grant := wire.EncodePermissionFrame(2, true)
+	r.Ops() <- BroadcastMsg{Sender: host, Data: grant}
+
+	for _, c := range []*client.Client{host, guest} {
+		select {
+		case f := <-c.SendChan():
+			if !bytes.Equal(f, grant) {
+				t.Fatalf("client %s received %x, want permission frame %x", c.ID, f, grant)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("client %s did not receive the permission broadcast", c.ID)
+		}
+	}
+	if !guest.CanWrite() {
+		t.Fatal("guest write permission was not applied")
+	}
+
+	op := []byte{wire.PrefixOp, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: guest, Data: op}
+	select {
+	case f := <-host.SendChan():
+		if !bytes.Equal(f, op) {
+			t.Fatalf("host received %x, want op %x", f, op)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("host did not receive op from granted guest")
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
+func TestRoom_PermissionChangeFromGuestIsDropped(t *testing.T) {
+	r := New("room-perm-guest", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-perm-guest", "hostname", nil)
+	guest := client.New("2", "room-perm-guest", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	r.Ops() <- BroadcastMsg{Sender: guest, Data: wire.EncodePermissionFrame(2, true)}
+
+	select {
+	case f := <-host.SendChan():
+		t.Fatalf("host received %x after guest-authored permission change, want drop", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if guest.CanWrite() {
+		t.Fatal("guest granted itself write access")
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
+func TestRoom_PermissionChangeForHostIsDropped(t *testing.T) {
+	r := New("room-perm-host", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-perm-host", "hostname", nil)
+	guest := client.New("2", "room-perm-host", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	r.Ops() <- BroadcastMsg{Sender: host, Data: wire.EncodePermissionFrame(1, false)}
+
+	select {
+	case f := <-guest.SendChan():
+		t.Fatalf("guest received %x after host-targeted permission change, want drop", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if !host.CanWrite() {
+		t.Fatal("host lost write access; host permission must be immutable")
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
 func TestRoom_GcCommitFromGuestIsDropped(t *testing.T) {
 	r := New("room-gc-guest", gatewaymetrics.New())
 	runDone := make(chan struct{})
 	go func() { r.Run(); close(runDone) }()
 
-	host := client.New("1", "room-gc-guest", nil)
-	guest := client.New("2", "room-gc-guest", nil)
+	host := client.New("1", "room-gc-guest", "hostname", nil)
+	guest := client.New("2", "room-gc-guest", "guestname", nil)
 	_ = r.Join(host)
 	_ = r.Join(guest)
 	_ = drainFrames(host)

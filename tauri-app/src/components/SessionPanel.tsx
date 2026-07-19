@@ -5,7 +5,9 @@ import {
   type SessionNotice,
 } from "../hooks/useSessionEvents";
 import { useMetrics } from "../hooks/useMetrics";
+import { useRoomState } from "../hooks/useRoomState";
 import { MetricsPopup } from "./MetricsPopup";
+import { PeersPanel } from "./PeersPanel";
 import { SaveBeforeSessionModal } from "./SaveBeforeSessionModal";
 import { JoinModal } from "./JoinModal";
 
@@ -49,14 +51,17 @@ export function SessionPanel({
 
   const { gatewayFields, gatewayUnavailable, tunnelFields, tunnelUnavailable } =
     useMetrics(sessionStatus, processesRunning);
+  const { roomState, clearRoomState } = useRoomState();
 
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showGatewayMetrics, setShowGatewayMetrics] = useState(false);
   const [showTunnelMetrics, setShowTunnelMetrics] = useState(false);
+  const [guestsCanWrite, setGuestsCanWrite] = useState(false);
 
   const isHost = sessionStatus === "host";
+  const inSession = isHost || sessionStatus === "guest";
 
   useEffect(() => {
     if (!isHost) {
@@ -78,13 +83,13 @@ export function SessionPanel({
   const handleHost = useCallback(async () => {
     setSessionBusy(true);
     try {
-      await invoke("host_session");
+      await invoke("host_session", { guestsCanWrite });
     } catch (err) {
       setSessionStatus("error: " + String(err));
     } finally {
       setSessionBusy(false);
     }
-  }, [setSessionBusy, setSessionStatus]);
+  }, [guestsCanWrite, setSessionBusy, setSessionStatus]);
 
   const startJoin = useCallback(async () => {
     await resetDocAndEditor();
@@ -126,13 +131,19 @@ export function SessionPanel({
     if (sessionBusy) return;
     setSessionBusy(true);
     void invoke("end_session")
-      .then(() => applyIdleSessionState())
+      .then(() => {
+        applyIdleSessionState();
+        clearRoomState();
+      })
       .finally(() => setSessionBusy(false));
-  }, [applyIdleSessionState, sessionBusy, setSessionBusy]);
+  }, [applyIdleSessionState, clearRoomState, sessionBusy, setSessionBusy]);
 
   const handleLeaveSession = useCallback(() => {
-    void invoke("leave_session").then(() => applyIdleSessionState());
-  }, [applyIdleSessionState]);
+    void invoke("leave_session").then(() => {
+      applyIdleSessionState();
+      clearRoomState();
+    });
+  }, [applyIdleSessionState, clearRoomState]);
 
   const handleKillProcesses = useCallback(() => {
     void invoke("kill_host_processes").then(() =>
@@ -238,6 +249,19 @@ export function SessionPanel({
               🔗 Join Session
             </button>
           )}
+          {!sessionBusy && (
+            <label
+              className="session-guests-edit"
+              title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+            >
+              <input
+                type="checkbox"
+                checked={guestsCanWrite}
+                onChange={(e) => setGuestsCanWrite(e.target.checked)}
+              />
+              Guests can edit
+            </label>
+          )}
         </div>
       )}
       {sessionNotice && (
@@ -291,6 +315,7 @@ export function SessionPanel({
           onCancel={() => setShowJoinModal(false)}
         />
       )}
+      {inSession && <PeersPanel roomState={roomState} isHost={isHost} />}
     </div>
   );
 }

@@ -3,6 +3,13 @@ pub const SESSION_ERROR: &str = "session://session-error";
 pub const SESSION_ENDED: &str = "session://session-ended";
 pub const SESSION_DISCONNECTED: &str = "session://disconnected";
 pub const PROCESSES_STOPPED: &str = "session://processes-stopped";
+pub const ROOM_STATE_CHANGED: &str = "session://room-state";
+pub const CAN_WRITE_CHANGED: &str = "session://can-write";
+
+#[derive(Clone, serde::Serialize)]
+pub struct CanWritePayload {
+    pub can_write: bool,
+}
 
 #[derive(Clone, serde::Serialize)]
 pub struct ProcessesStoppedPayload {}

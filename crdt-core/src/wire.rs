@@ -15,9 +15,14 @@ pub const CONTROL_SNAPSHOT_REQUEST: u8 = 0x02;
 pub const PREFIX_GC_COMMIT: u8 = 0x04;
 pub const PREFIX_MEMBERSHIP: u8 = 0x05;
 pub const PREFIX_SV_REPORT: u8 = 0x06;
+pub const PREFIX_PERMISSION: u8 = 0x07;
+pub const PREFIX_PEER_INFO: u8 = 0x08;
 
 pub const PEER_JOINED: u8 = 0x01;
 pub const PEER_LEFT: u8 = 0x02;
+
+pub const PEER_FLAG_HOST: u8 = 0x01;
+pub const PEER_FLAG_CAN_WRITE: u8 = 0x02;
 
 #[derive(Debug, Clone, PartialEq, Eq, bitcode::Encode, bitcode::Decode)]
 pub struct WireBlock {
@@ -63,6 +68,20 @@ pub struct MembershipFrame {
     pub event: MembershipEvent,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PermissionFrame {
+    pub client_id: ClientId,
+    pub can_write: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerInfoFrame {
+    pub client_id: ClientId,
+    pub is_host: bool,
+    pub can_write: bool,
+    pub username: String,
+}
+
 #[derive(Debug)]
 pub enum WireError {
     EmptyFrame,
@@ -73,6 +92,10 @@ pub enum WireError {
     NotAMember,
     NotAnSvReport,
     MalformedMembership,
+    NotAPermission,
+    MalformedPermission,
+    NotAPeerInfo,
+    MalformedPeerInfo,
     Decode(bitcode::Error),
     SnapshotDecode(SnapshotError),
 }
@@ -101,6 +124,18 @@ impl fmt::Display for WireError {
             }
             WireError::MalformedMembership => {
                 write!(f, "membership frame has an invalid layout")
+            }
+            WireError::NotAPermission => {
+                write!(f, "wire frame is not a permission frame")
+            }
+            WireError::MalformedPermission => {
+                write!(f, "permission frame has an invalid layout")
+            }
+            WireError::NotAPeerInfo => {
+                write!(f, "wire frame is not a peer-info frame")
+            }
+            WireError::MalformedPeerInfo => {
+                write!(f, "peer-info frame has an invalid layout")
             }
             WireError::Decode(e) => write!(f, "bitcode decode failed: {e}"),
             WireError::SnapshotDecode(e) => write!(f, "snapshot decode failed: {e}"),
@@ -236,6 +271,76 @@ pub fn decode_membership(frame: &[u8]) -> Result<MembershipFrame, WireError> {
     Ok(MembershipFrame {
         client_id: ClientId::new(u64::from_be_bytes(client_bytes)),
         event,
+    })
+}
+
+pub fn encode_permission(frame: &PermissionFrame) -> Vec<u8> {
+    let mut out = Vec::with_capacity(10);
+    out.push(PREFIX_PERMISSION);
+    out.push(u8::from(frame.can_write));
+    out.extend_from_slice(&frame.client_id.value.to_be_bytes());
+    out
+}
+
+pub fn decode_permission(frame: &[u8]) -> Result<PermissionFrame, WireError> {
+    let (&prefix, payload) = frame.split_first().ok_or(WireError::EmptyFrame)?;
+    if prefix != PREFIX_PERMISSION {
+        return Err(WireError::NotAPermission);
+    }
+    if payload.len() != 9 || payload[0] > 1 {
+        return Err(WireError::MalformedPermission);
+    }
+    let mut client_bytes = [0u8; 8];
+    client_bytes.copy_from_slice(&payload[1..9]);
+    Ok(PermissionFrame {
+        client_id: ClientId::new(u64::from_be_bytes(client_bytes)),
+        can_write: payload[0] == 1,
+    })
+}
+
+pub fn encode_peer_info(frame: &PeerInfoFrame) -> Vec<u8> {
+    let username = frame.username.as_bytes();
+    debug_assert!(username.len() <= u8::MAX as usize);
+    let mut flags = 0u8;
+    if frame.is_host {
+        flags |= PEER_FLAG_HOST;
+    }
+    if frame.can_write {
+        flags |= PEER_FLAG_CAN_WRITE;
+    }
+    let mut out = Vec::with_capacity(11 + username.len());
+    out.push(PREFIX_PEER_INFO);
+    out.push(flags);
+    out.extend_from_slice(&frame.client_id.value.to_be_bytes());
+    out.push(username.len() as u8);
+    out.extend_from_slice(username);
+    out
+}
+
+pub fn decode_peer_info(frame: &[u8]) -> Result<PeerInfoFrame, WireError> {
+    let (&prefix, payload) = frame.split_first().ok_or(WireError::EmptyFrame)?;
+    if prefix != PREFIX_PEER_INFO {
+        return Err(WireError::NotAPeerInfo);
+    }
+    if payload.len() < 10 {
+        return Err(WireError::MalformedPeerInfo);
+    }
+    let flags = payload[0];
+    let mut client_bytes = [0u8; 8];
+    client_bytes.copy_from_slice(&payload[1..9]);
+    let username_len = payload[9] as usize;
+    let username_bytes = &payload[10..];
+    if username_bytes.len() != username_len {
+        return Err(WireError::MalformedPeerInfo);
+    }
+    let username = std::str::from_utf8(username_bytes)
+        .map_err(|_| WireError::MalformedPeerInfo)?
+        .to_string();
+    Ok(PeerInfoFrame {
+        client_id: ClientId::new(u64::from_be_bytes(client_bytes)),
+        is_host: flags & PEER_FLAG_HOST != 0,
+        can_write: flags & PEER_FLAG_CAN_WRITE != 0,
+        username,
     })
 }
 

@@ -41,6 +41,23 @@ interface UseRemoteChangeListenerArgs {
   onDocChanged: () => void;
 }
 
+function executeRemoteEdit(
+  ed: editor.IStandaloneCodeEditor,
+  edits: editor.IIdentifiedSingleEditOperation[],
+) {
+  const wasReadOnly = ed.getRawOptions().readOnly === true;
+  if (wasReadOnly) {
+    ed.updateOptions({ readOnly: false });
+  }
+  try {
+    ed.executeEdits("crdt", edits);
+  } finally {
+    if (wasReadOnly) {
+      ed.updateOptions({ readOnly: true });
+    }
+  }
+}
+
 export function useRemoteChangeListener({
   editorRef,
   monacoRef,
@@ -77,7 +94,7 @@ export function useRemoteChangeListener({
       try {
         if (change.type === "insert") {
           const pos = model.getPositionAt(change.position);
-          ed.executeEdits("crdt", [
+          executeRemoteEdit(ed, [
             {
               range: new mn.Range(
                 pos.lineNumber,
@@ -103,7 +120,7 @@ export function useRemoteChangeListener({
         } else {
           const startPos = model.getPositionAt(change.position);
           const endPos = model.getPositionAt(change.position + change.length);
-          ed.executeEdits("crdt", [
+          executeRemoteEdit(ed, [
             {
               range: new mn.Range(
                 startPos.lineNumber,

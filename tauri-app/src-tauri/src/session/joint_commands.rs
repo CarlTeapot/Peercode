@@ -1,8 +1,8 @@
-use crate::session::session_types::SessionInfo;
+use crate::session::session_types::{CanWritePayload, SessionInfo, CAN_WRITE_CHANGED};
 use crate::state::appstate::{AppRole, AppState};
 use crate::state::ws_state::WsState;
 use log::{debug, info, warn};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub fn get_session_info(state: State<'_, AppState>) -> SessionInfo {
@@ -25,6 +25,7 @@ pub fn get_session_info(state: State<'_, AppState>) -> SessionInfo {
         AppRole::Guest {
             room_id,
             server_url,
+            ..
         } => (None, Some(server_url), None, None, Some(room_id)),
         _ => (None, None, None, None, None),
     };
@@ -41,7 +42,11 @@ pub fn get_session_info(state: State<'_, AppState>) -> SessionInfo {
 }
 
 #[tauri::command]
-pub fn leave_session(state: State<'_, AppState>, ws: State<'_, WsState>) -> Result<(), String> {
+pub fn leave_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    ws: State<'_, WsState>,
+) -> Result<(), String> {
     info!("leave session requested");
     state.leave_session(&ws);
     match state.transition_role(AppRole::Undecided) {
@@ -51,6 +56,7 @@ pub fn leave_session(state: State<'_, AppState>, ws: State<'_, WsState>) -> Resu
         ),
         Err(e) => warn!("leave_session: {e}"),
     }
+    let _ = app.emit(CAN_WRITE_CHANGED, CanWritePayload { can_write: true });
     info!("leave session completed");
     Ok(())
 }

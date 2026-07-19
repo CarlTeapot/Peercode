@@ -105,9 +105,15 @@ There is a binary wire framing **and** a JSON protocol envelope. They are not th
   - `0x04` = gc-commit (bitcode-encoded `DeleteSet`; host → all peers — see Garbage collection)
   - `0x05` = membership (fixed 10-byte `[0x05][event][client_id u64 BE]`, **not** bitcode; gateway → all clients)
   - `0x06` = sv-report (bitcode-encoded `(ClientId, Vec<(ClientId,u64)>)`; peer → all, host consumes)
+  - `0x07` = permission (fixed 10-byte `[0x07][can_write 0|1][client_id u64 BE]`; host → gateway as a change request, gateway → all clients as the authoritative echo — see Permissions)
+  - `0x08` = peer-info (`[0x08][flags][client_id u64 BE][len u8][username]`, flags bit0 = host / bit1 = can-write; gateway-authored only — sent to a joiner for every current member incl. itself, and to existing members when someone joins)
 - **JSON envelope** (`gateway/internal/protocol/protocol.go`) documents a higher-level `{type, room, client_id, seq, payload}` message intended for sync/peer-list semantics. Treat this file as the protocol spec; the gateway today operates on raw binary frames (snapshot vs op detection) and does not currently parse the JSON envelope.
 
 The gateway's room (`gateway/internal/room/room.go`) is a stateless relay: it stores neither a snapshot nor an ops log. On join it calls `ReplayTo`, which sends the host a `snapshot-request` control frame and forwards the host's fresh snapshot response to the joiner; all other frames are broadcast to peers (sender excluded). The room also emits `membership` frames (`0x05`) on join/leave so the host can track membership for GC. `gc-commit`/`sv-report` frames are broadcast like ops (the gateway never decodes them).
+
+### Permissions
+
+Guests join read-only unless the host opted into `default_can_write` (a WS query param on the host's own connection, chosen via the "Guests can edit" toggle); the host can then grant/revoke write access per peer. The gateway is the authority: each `client.Client` carries `Role` (first joiner = host) and an atomic `canWrite`; the room drops op frames from read-only senders and handles inbound `0x07` frames (host-only, host target immutable) by flipping the target's flag and echoing the frame to everyone. Rosters are seeded with `0x08` peer-info frames at join. On the Tauri side, `state/roster.rs` owns the peer list and applies permission/peer-info/membership frames (the ws receiver only routes); a guest's own permission lives as `WriteAccess` inside `AppRole::Guest` and gates the `insert`/`delete`/`replace` commands, with Monaco's `readOnly` mirroring it via `session://can-write`. Beware: Monaco silently drops editor-level `executeEdits` on a read-only editor, so remote changes are applied through `executeRemoteEdit` in `remoteChangeListener.ts`, which lifts the flag around the edit. The peers UI is `components/PeersPanel.tsx` fed by `session://room-state`; client ids cross the JS boundary as strings (u64 > 2^53).
 
 ### Garbage collection
 

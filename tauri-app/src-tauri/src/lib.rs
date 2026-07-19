@@ -9,7 +9,6 @@ mod state;
 mod ws_management;
 
 use crate::app_config::config::AppConfig;
-use crate::app_config::identity;
 #[cfg(debug_assertions)]
 use crate::debug::document_logger::spawn_linked_list_logger;
 use crate::gateway::gateway_api::destroy_room;
@@ -112,9 +111,10 @@ pub fn run() {
             session::guest_commands::parse_join_url,
             session::joint_commands::get_session_info,
             session::joint_commands::leave_session,
+            session::permission_commands::set_peer_permission,
             processes::commands::get_process_status,
-            identity::get_identity,
-            identity::set_username,
+            app_config::commands::get_identity,
+            app_config::commands::set_username,
             persistence::commands::open_file,
             persistence::commands::save_file,
             persistence::commands::save_file_as,

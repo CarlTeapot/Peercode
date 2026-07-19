@@ -31,9 +31,10 @@ type Room struct {
 	ID string
 
 	mu      sync.Mutex
-	clients map[*client.Client]struct{}
+	clients map[string]*client.Client
 	closed  bool
 	host    *client.Client
+	defaultCanWrite bool
 
 	snapshotRequests []chan []byte
 
@@ -46,7 +47,7 @@ type Room struct {
 func New(id string, registry *gatewaymetrics.Registry) *Room {
 	return &Room{
 		ID:      id,
-		clients: make(map[*client.Client]struct{}),
+		clients: make(map[string]*client.Client),
 		ops:     make(chan BroadcastMsg, opsBufferSize),
 		done:    make(chan struct{}),
 		metrics: registry,
@@ -60,39 +61,43 @@ func (r *Room) Join(c *client.Client) error {
 		slog.Warn("join rejected: room already closed", "room_id", r.ID, "client_id", c.ID)
 		return ErrRoomClosed
 	}
-	for existing := range r.clients {
-		if existing.ID == c.ID {
-			slog.Warn("join rejected: duplicate client_id", "room_id", r.ID, "client_id", c.ID)
-			return ErrDuplicateClientID
-		}
+	if _, exists := r.clients[c.ID]; exists {
+		slog.Warn("join rejected: duplicate client_id", "room_id", r.ID, "client_id", c.ID)
+		return ErrDuplicateClientID
 	}
-	r.clients[c] = struct{}{}
-	isHost := false
-	if r.host == nil {
+	r.clients[c.ID] = c
+	isHost := r.host == nil
+	if isHost {
 		r.host = c
-		c.MarkHost()
-		isHost = true
-		slog.Info("host client registered", "room_id", r.ID, "client_id", c.ID)
+		c.SetRole(client.RoleHost)
+		c.SetCanWrite(true)
+		r.defaultCanWrite = c.HostDefaultCanWrite
+		slog.Info("host client registered", "room_id", r.ID, "client_id", c.ID, "default_can_write", r.defaultCanWrite)
+	} else {
+		c.SetRole(client.RoleGuest)
+		c.SetCanWrite(r.defaultCanWrite)
 	}
 	r.metrics.ClientJoined(isHost)
 	// Notify existing members (incl. the host) that c joined.
 	r.broadcastMembershipLocked(c.ID, wire.MembershipJoined, c)
-	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "size", len(r.clients))
+	r.sendRosterLocked(c)
+	r.announcePeerLocked(c)
+	slog.Info("join accepted", "room_id", r.ID, "client_id", c.ID, "can_write", c.CanWrite(), "size", len(r.clients))
 	return nil
 }
 
 func (r *Room) Leave(c *client.Client, onEmpty func()) {
 	r.mu.Lock()
-	if _, ok := r.clients[c]; !ok {
+	if current, ok := r.clients[c.ID]; !ok || current != c {
 		slog.Debug("leave ignored: client not present in room", "room_id", r.ID, "client_id", c.ID)
 		r.mu.Unlock()
 		return
 	}
-	delete(r.clients, c)
+	delete(r.clients, c.ID)
 	wasHost := r.host == c
 	if wasHost {
 		r.host = nil
-		c.ClearHost()
+		c.SetRole(client.RoleGuest)
 	}
 	r.metrics.ClientLeft(wasHost)
 	c.CloseSend()
@@ -171,21 +176,67 @@ func (r *Room) Run() {
 			slog.Info("room loop stopped", "room_id", r.ID)
 			return
 		case msg := <-r.ops:
-			if wire.IsSnapshotFrame(msg.Data) {
-				if !r.deliverSnapshotResponse(msg.Sender, msg.Data) {
-					slog.Debug("snapshot frame dropped: no pending snapshot request", "room_id", r.ID, "client_id", msg.Sender.ID, "bytes", len(msg.Data))
-				}
-			} else {
-				r.broadcast(msg)
-			}
+			r.dispatch(msg)
 		}
 	}
+}
+
+func (r *Room) dispatch(msg BroadcastMsg) {
+	switch {
+	case wire.IsSnapshotFrame(msg.Data):
+		if !r.deliverSnapshotResponse(msg.Sender, msg.Data) {
+			slog.Debug("snapshot frame dropped: no pending snapshot request", "room_id", r.ID, "client_id", msg.Sender.ID, "bytes", len(msg.Data))
+		}
+	case wire.IsPermissionFrame(msg.Data):
+		r.handlePermissionChange(msg)
+	default:
+		r.broadcast(msg)
+	}
+}
+
+func (r *Room) handlePermissionChange(msg BroadcastMsg) {
+	if !msg.Sender.IsHost() {
+		slog.Warn("permission change dropped from non-host sender", "room_id", r.ID, "client_id", msg.Sender.ID)
+		return
+	}
+	targetID, canWrite, err := wire.DecodePermissionFrame(msg.Data)
+	if err != nil {
+		slog.Warn("permission change dropped: decode failed", "room_id", r.ID, "error", err)
+		return
+	}
+	target := r.clientByID(strconv.FormatUint(targetID, 10))
+	if target == nil {
+		slog.Warn("permission change dropped: unknown target", "room_id", r.ID, "target_id", targetID)
+		return
+	}
+	if target.IsHost() {
+		slog.Warn("permission change dropped: host permission is immutable", "room_id", r.ID, "target_id", targetID)
+		return
+	}
+	target.SetCanWrite(canWrite)
+	slog.Info("permission updated", "room_id", r.ID, "target_id", targetID, "can_write", canWrite)
+	r.BroadcastAll(msg.Data)
+}
+
+func (r *Room) clientByID(id string) *client.Client {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.clients[id]
 }
 
 func (r *Room) broadcast(msg BroadcastMsg) {
 	if wire.IsGcCommitFrame(msg.Data) && !msg.Sender.IsHost() {
 		slog.Warn(
 			"gc-commit dropped from non-host sender",
+			"room_id", r.ID,
+			"client_id", msg.Sender.ID,
+			"bytes", len(msg.Data),
+		)
+		return
+	}
+	if wire.IsOpFrame(msg.Data) && !msg.Sender.CanWrite() {
+		slog.Warn(
+			"op dropped from read-only sender",
 			"room_id", r.ID,
 			"client_id", msg.Sender.ID,
 			"bytes", len(msg.Data),
@@ -251,7 +302,7 @@ func (r *Room) broadcastMembershipLocked(subjectID string, event byte, exclude *
 		return
 	}
 	frame := wire.EncodeMembershipFrame(id, event)
-	for cl := range r.clients {
+	for _, cl := range r.clients {
 		if cl == exclude {
 			continue
 		}
@@ -262,11 +313,55 @@ func (r *Room) broadcastMembershipLocked(subjectID string, event byte, exclude *
 	}
 }
 
+func (r *Room) sendRosterLocked(joiner *client.Client) {
+	for _, member := range r.clients {
+		frame, ok := encodePeerInfo(member)
+		if !ok {
+			continue
+		}
+		if !joiner.Send(frame) {
+			slog.Warn("roster: send failed (slow client); force-closing", "room_id", r.ID, "client_id", joiner.ID)
+			joiner.ForceClose()
+			return
+		}
+	}
+}
+
+func (r *Room) announcePeerLocked(joiner *client.Client) {
+	frame, ok := encodePeerInfo(joiner)
+	if !ok {
+		return
+	}
+	for _, member := range r.clients {
+		if member == joiner {
+			continue
+		}
+		if !member.Send(frame) {
+			slog.Warn("peer-info: send failed (slow client); force-closing", "room_id", r.ID, "client_id", member.ID)
+			member.ForceClose()
+		}
+	}
+}
+
+func encodePeerInfo(c *client.Client) (frame []byte, ok bool) {
+	id, err := strconv.ParseUint(c.ID, 10, 64)
+	if err != nil {
+		slog.Warn("peer-info: non-numeric client_id; skipping", "client_id", c.ID, "error", err)
+		return nil, false
+	}
+	frame, err = wire.EncodePeerInfoFrame(id, c.IsHost(), c.CanWrite(), c.Username)
+	if err != nil {
+		slog.Warn("peer-info: encode failed; skipping", "client_id", c.ID, "error", err)
+		return nil, false
+	}
+	return frame, true
+}
+
 func (r *Room) getPeers(exclude *client.Client) []*client.Client {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	targets := make([]*client.Client, 0, len(r.clients))
-	for c := range r.clients {
+	for _, c := range r.clients {
 		if exclude == nil || c != exclude {
 			targets = append(targets, c)
 		}
@@ -293,11 +388,7 @@ func (r *Room) drain() {
 		select {
 		case msg := <-r.ops:
 			drained++
-			if wire.IsSnapshotFrame(msg.Data) {
-				_ = r.deliverSnapshotResponse(msg.Sender, msg.Data)
-			} else {
-				r.broadcast(msg)
-			}
+			r.dispatch(msg)
 		default:
 			slog.Debug("room drain finished", "room_id", r.ID, "drained_messages", drained)
 			return

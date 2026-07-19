@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 
@@ -342,6 +343,107 @@ func TestHub_FanOut_ThreeClients(t *testing.T) {
 	_, _, err := a.Read(noEchoCtx)
 	if err == nil {
 		t.Fatal("mate received echo")
+	}
+}
+
+func readFrameWithPrefix(t *testing.T, conn *websocket.Conn, prefix byte) []byte {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_, data, err := conn.Read(ctx)
+		cancel()
+		if err != nil {
+			t.Fatalf("read while waiting for prefix %#x: %v", prefix, err)
+		}
+		if len(data) > 0 && data[0] == prefix {
+			return data
+		}
+	}
+	t.Fatalf("no frame with prefix %#x arrived", prefix)
+	return nil
+}
+
+func answerSnapshotRequestSkippingRoster(t *testing.T, host *websocket.Conn) {
+	t.Helper()
+	request := readFrameWithPrefix(t, host, wire.PrefixControl)
+	if len(request) != 2 || request[1] != wire.ControlSnapshotRequest {
+		t.Fatalf("control frame = %v, want snapshot request", request)
+	}
+	if err := host.Write(context.Background(), websocket.MessageBinary, []byte{wire.PrefixSnapshot, 0xAA}); err != nil {
+		t.Fatalf("host snapshot response write: %v", err)
+	}
+}
+
+func TestHub_ReadOnlyGuestPermissionLifecycle(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	host := dial(t, wsURL(srv.URL, "perm", "1"))
+	defer host.Close(websocket.StatusNormalClosure, "")
+	guest := dial(t, wsURL(srv.URL, "perm", "2")+"&username=guestname")
+	defer guest.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequestSkippingRoster(t, host)
+	_ = readFrameWithPrefix(t, guest, wire.PrefixSnapshot)
+
+	blocked := wire.EncodeOpFrame([]byte("blocked"))
+	if err := guest.Write(context.Background(), websocket.MessageBinary, blocked); err != nil {
+		t.Fatalf("guest write: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	grant := wire.EncodePermissionFrame(2, true)
+	if err := host.Write(context.Background(), websocket.MessageBinary, grant); err != nil {
+		t.Fatalf("host write grant: %v", err)
+	}
+	if got := readFrameWithPrefix(t, guest, wire.PrefixPermission); !bytes.Equal(got, grant) {
+		t.Fatalf("guest permission echo = %x, want %x", got, grant)
+	}
+	if got := readFrameWithPrefix(t, host, wire.PrefixPermission); !bytes.Equal(got, grant) {
+		t.Fatalf("host permission echo = %x, want %x", got, grant)
+	}
+
+	allowed := wire.EncodeOpFrame([]byte("allowed"))
+	if err := guest.Write(context.Background(), websocket.MessageBinary, allowed); err != nil {
+		t.Fatalf("guest write after grant: %v", err)
+	}
+	if got := readFrameWithPrefix(t, host, wire.PrefixOp); !bytes.Equal(got, allowed) {
+		t.Fatalf("host op = %x, want %x", got, allowed)
+	}
+}
+
+func TestHub_DefaultCanWriteParamGrantsGuests(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	host := dial(t, wsURL(srv.URL, "perm-default", "1")+"&default_can_write=true")
+	defer host.Close(websocket.StatusNormalClosure, "")
+	guest := dial(t, wsURL(srv.URL, "perm-default", "2"))
+	defer guest.Close(websocket.StatusNormalClosure, "")
+	answerSnapshotRequestSkippingRoster(t, host)
+	_ = readFrameWithPrefix(t, guest, wire.PrefixSnapshot)
+
+	op := wire.EncodeOpFrame([]byte("immediate"))
+	if err := guest.Write(context.Background(), websocket.MessageBinary, op); err != nil {
+		t.Fatalf("guest write: %v", err)
+	}
+	if got := readFrameWithPrefix(t, host, wire.PrefixOp); !bytes.Equal(got, op) {
+		t.Fatalf("host op = %x, want %x", got, op)
+	}
+}
+
+func TestSanitizeUsername(t *testing.T) {
+	if got := sanitizeUsername("alice"); got != "alice" {
+		t.Fatalf("sanitizeUsername(alice) = %q", got)
+	}
+	if got := sanitizeUsername(string([]byte{0xFF, 'a', 0xFE})); got != "a" {
+		t.Fatalf("sanitizeUsername(invalid utf8) = %q, want %q", got, "a")
+	}
+	long := strings.Repeat("é", 200)
+	got := sanitizeUsername(long)
+	if len(got) > wire.MaxUsernameBytes {
+		t.Fatalf("sanitized username is %d bytes, want <= %d", len(got), wire.MaxUsernameBytes)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("sanitized username was cut mid-rune")
 	}
 }
 

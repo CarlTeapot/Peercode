@@ -1,7 +1,8 @@
 use super::{
     CONTROL_SESSION_ENDED, CONTROL_SNAPSHOT_REQUEST, MembershipEvent, MembershipFrame, OP_PREFIX,
-    PEER_JOINED, PEER_LEFT, PREFIX_CONTROL, PREFIX_GC_COMMIT, PREFIX_MEMBERSHIP, PREFIX_SV_REPORT,
-    SNAPSHOT_PREFIX, encode_membership,
+    PEER_FLAG_CAN_WRITE, PEER_FLAG_HOST, PEER_JOINED, PEER_LEFT, PREFIX_CONTROL, PREFIX_GC_COMMIT,
+    PREFIX_MEMBERSHIP, PREFIX_PEER_INFO, PREFIX_PERMISSION, PREFIX_SV_REPORT, PeerInfoFrame,
+    PermissionFrame, SNAPSHOT_PREFIX, encode_membership, encode_peer_info, encode_permission,
 };
 use crate::types::ClientId;
 
@@ -17,8 +18,12 @@ fn prefix_constants_match_go_mirror() {
     const GO_PREFIX_GC_COMMIT: u8 = 0x04;
     const GO_PREFIX_MEMBERSHIP: u8 = 0x05;
     const GO_PREFIX_SV_REPORT: u8 = 0x06;
+    const GO_PREFIX_PERMISSION: u8 = 0x07;
+    const GO_PREFIX_PEER_INFO: u8 = 0x08;
     const GO_MEMBERSHIP_JOINED: u8 = 0x01;
     const GO_MEMBERSHIP_LEFT: u8 = 0x02;
+    const GO_PEER_FLAG_HOST: u8 = 0x01;
+    const GO_PEER_FLAG_CAN_WRITE: u8 = 0x02;
 
     assert_eq!(
         OP_PREFIX, GO_PREFIX_OP,
@@ -60,6 +65,22 @@ fn prefix_constants_match_go_mirror() {
         PEER_LEFT, GO_MEMBERSHIP_LEFT,
         "MEMBERSHIP_LEFT drifted from gateway/internal/wire::MembershipLeft"
     );
+    assert_eq!(
+        PREFIX_PERMISSION, GO_PREFIX_PERMISSION,
+        "PREFIX_PERMISSION drifted from gateway/internal/wire::PrefixPermission"
+    );
+    assert_eq!(
+        PREFIX_PEER_INFO, GO_PREFIX_PEER_INFO,
+        "PREFIX_PEER_INFO drifted from gateway/internal/wire::PrefixPeerInfo"
+    );
+    assert_eq!(
+        PEER_FLAG_HOST, GO_PEER_FLAG_HOST,
+        "PEER_FLAG_HOST drifted from gateway/internal/wire::PeerFlagHost"
+    );
+    assert_eq!(
+        PEER_FLAG_CAN_WRITE, GO_PEER_FLAG_CAN_WRITE,
+        "PEER_FLAG_CAN_WRITE drifted from gateway/internal/wire::PeerFlagCanWrite"
+    );
 }
 
 #[test]
@@ -84,5 +105,60 @@ fn presence_layout_matches_go_mirror() {
         encode_membership(&frame),
         expected,
         "Membership frame layout drifted from gateway/internal/wire::EncodeMembershipFrame"
+    );
+}
+
+#[test]
+fn permission_layout_matches_go_mirror() {
+    let frame = PermissionFrame {
+        client_id: ClientId::new(0x0102_0304_0506_0708),
+        can_write: true,
+    };
+    let expected = vec![
+        PREFIX_PERMISSION,
+        0x01,
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        0x05,
+        0x06,
+        0x07,
+        0x08,
+    ];
+    assert_eq!(
+        encode_permission(&frame),
+        expected,
+        "Permission frame layout drifted from gateway/internal/wire::EncodePermissionFrame"
+    );
+}
+
+#[test]
+fn peer_info_layout_matches_go_mirror() {
+    let frame = PeerInfoFrame {
+        client_id: ClientId::new(0x0102_0304_0506_0708),
+        is_host: true,
+        can_write: true,
+        username: "ab".to_string(),
+    };
+    let expected = vec![
+        PREFIX_PEER_INFO,
+        PEER_FLAG_HOST | PEER_FLAG_CAN_WRITE,
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        0x05,
+        0x06,
+        0x07,
+        0x08,
+        0x02,
+        b'a',
+        b'b',
+    ];
+    assert_eq!(
+        encode_peer_info(&frame),
+        expected,
+        "Peer-info frame layout drifted from gateway/internal/wire::EncodePeerInfoFrame"
     );
 }
