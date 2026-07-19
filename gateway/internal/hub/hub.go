@@ -135,9 +135,9 @@ func (h *Hub) unregister(c *client.Client, r *room.Room) {
 }
 
 type wsParams struct {
-	roomID   string
-	clientID string
-	username string
+	roomID          string
+	clientID        string
+	username        string
 	defaultCanWrite bool
 }
 

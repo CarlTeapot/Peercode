@@ -30,10 +30,10 @@ type BroadcastMsg struct {
 type Room struct {
 	ID string
 
-	mu      sync.Mutex
-	clients map[string]*client.Client
-	closed  bool
-	host    *client.Client
+	mu              sync.Mutex
+	clients         map[string]*client.Client
+	closed          bool
+	host            *client.Client
 	defaultCanWrite bool
 
 	snapshotRequests []chan []byte

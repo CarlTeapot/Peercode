@@ -18,9 +18,9 @@ const (
 )
 
 type Client struct {
-	ID       string
-	RoomID   string
-	Username string
+	ID                  string
+	RoomID              string
+	Username            string
 	HostDefaultCanWrite bool
 	conn                *websocket.Conn
 	send                chan []byte
