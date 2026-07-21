@@ -1,11 +1,11 @@
 /* ── Peers panel (TUI box overlay) ─────────────────────── */
 
-.peers-panel {
+.peers-panel.tui-box {
   position: fixed;
   right: 16px;
-  bottom: 42px;
+  bottom: 46px;
   z-index: 901;
-  width: 300px;
+  width: 320px;
   max-height: 360px;
   background: var(--bg-raised);
   box-shadow: var(--shadow-pop);
@@ -71,13 +71,13 @@
 }
 
 .peer-avatar {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
   background: transparent;
@@ -99,7 +99,7 @@
 }
 
 .peer-name {
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-1);
   white-space: nowrap;
   overflow: hidden;
@@ -117,8 +117,8 @@
 
 .perm-toggle {
   flex-shrink: 0;
-  width: 32px;
-  height: 16px;
+  width: 38px;
+  height: 19px;
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   cursor: pointer;
@@ -138,15 +138,15 @@
 .perm-toggle .knob {
   position: absolute;
   top: 1px;
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   border-radius: 2px;
   background: var(--text-2);
   transition: left 0.15s;
 }
 
 .perm-toggle.can-write .knob {
-  left: 17px;
+  left: 21px;
   background: var(--green);
 }
 

@@ -13,7 +13,10 @@ function sanitize(raw: string): string {
 }
 
 interface UsernameGateProps {
-  children: (username: string) => React.ReactNode;
+  children: (
+    username: string,
+    setUsername: (name: string) => void,
+  ) => React.ReactNode;
 }
 
 export function UsernameGate({ children }: UsernameGateProps) {
@@ -27,15 +30,12 @@ export function UsernameGate({ children }: UsernameGateProps) {
 
   if (username === null) return null;
   if (username === "") return <FirstRunModal onDone={setUsername} />;
-  return <>{children(username)}</>;
+  return <>{children(username, setUsername)}</>;
 }
 
-interface FirstRunModalProps {
-  onDone: (username: string) => void;
-}
-
-function FirstRunModal({ onDone }: FirstRunModalProps) {
-  const [value, setValue] = useState("");
+/** Shared submit flow: persist the sanitized name, then report it up. */
+function useNameForm(initial: string, onDone: (username: string) => void) {
+  const [value, setValue] = useState(initial);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -59,9 +59,19 @@ function FirstRunModal({ onDone }: FirstRunModalProps) {
     [clean, canSubmit, onDone],
   );
 
+  return { value, setValue, error, setError, saving, canSubmit, handleSubmit };
+}
+
+interface FirstRunModalProps {
+  onDone: (username: string) => void;
+}
+
+function FirstRunModal({ onDone }: FirstRunModalProps) {
+  const form = useNameForm("", onDone);
+
   return (
     <div className="modal-overlay">
-      <form className="modal-card" onSubmit={handleSubmit}>
+      <form className="modal-card" onSubmit={(e) => void form.handleSubmit(e)}>
         <div className="modal-title">welcome to peercode</div>
         <div className="modal-text">
           Choose a display name. Others in your session will see it.
@@ -71,16 +81,70 @@ function FirstRunModal({ onDone }: FirstRunModalProps) {
           autoFocus
           placeholder="Your name"
           maxLength={MAX_LEN}
-          value={value}
+          value={form.value}
           onChange={(e) => {
-            setValue(e.target.value);
-            setError("");
+            form.setValue(e.target.value);
+            form.setError("");
           }}
         />
-        <div className="modal-error">{error}</div>
-        <button type="submit" className="modal-btn" disabled={!canSubmit}>
-          {saving ? "saving…" : "Continue"}
+        <div className="modal-error">{form.error}</div>
+        <button type="submit" className="modal-btn" disabled={!form.canSubmit}>
+          {form.saving ? "saving…" : "Continue"}
         </button>
+      </form>
+    </div>
+  );
+}
+
+interface ChangeNameModalProps {
+  current: string;
+  onDone: (username: string) => void;
+  onCancel: () => void;
+}
+
+export function ChangeNameModal({
+  current,
+  onDone,
+  onCancel,
+}: ChangeNameModalProps) {
+  const form = useNameForm(current, onDone);
+
+  return (
+    <div className="modal-overlay">
+      <form className="modal-card" onSubmit={(e) => void form.handleSubmit(e)}>
+        <div className="modal-title">change name</div>
+        <div className="modal-text">
+          Peers already in the room keep seeing your old name; the new one
+          applies when you next join or host.
+        </div>
+        <input
+          className="modal-input"
+          autoFocus
+          placeholder="Your name"
+          maxLength={MAX_LEN}
+          value={form.value}
+          onChange={(e) => {
+            form.setValue(e.target.value);
+            form.setError("");
+          }}
+        />
+        <div className="modal-error">{form.error}</div>
+        <div className="modal-btn-row">
+          <button
+            type="button"
+            className="modal-btn neutral"
+            onClick={onCancel}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="modal-btn"
+            disabled={!form.canSubmit}
+          >
+            {form.saving ? "saving…" : "Save"}
+          </button>
+        </div>
       </form>
     </div>
   );

@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Collab Editor",
+        "title": "PeerCode",
         "width": 1280,
         "height": 800
       }

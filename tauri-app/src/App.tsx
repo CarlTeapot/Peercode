@@ -6,7 +6,7 @@ import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import { normalizeToLF, forceModelLF } from "./eol";
-import { UsernameGate } from "./usernameSetup";
+import { UsernameGate, ChangeNameModal } from "./usernameSetup";
 import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
 import { PeersPanel } from "./components/PeersPanel";
@@ -68,15 +68,17 @@ function installPlainTextPasteHandler(
 
 interface AppContentProps {
   username: string;
+  onUsernameChange: (name: string) => void;
 }
 
-function AppContent({ username }: AppContentProps) {
+function AppContent({ username, onUsernameChange }: AppContentProps) {
   const isDevFeaturesEnabled = import.meta.env.VITE_DEV_FEATURES === "true";
   const [statusReady, setStatusReady] = useState(false);
   const [eventLog, setEventLog] = useState<LogEntry[]>([]);
   const eventCountRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const [showRename, setShowRename] = useState(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const isApplyingRemote = useRef(false);
@@ -286,12 +288,6 @@ function AppContent({ username }: AppContentProps) {
           onSaved={() => setDirty(false)}
           onCurrentChanged={setFileInfo}
         />
-        <SessionPanel
-          getEditorContent={getEditorContent}
-          resetDocAndEditor={resetDocAndEditor}
-          session={session}
-          clearRoomState={clearRoomState}
-        />
         {isDevFeaturesEnabled && (
           <button
             onClick={() => void toggleLogging()}
@@ -300,8 +296,35 @@ function AppContent({ username }: AppContentProps) {
             CRDT log {loggingEnabled ? "ON" : "OFF"}
           </button>
         )}
-        {username && <span className="toolbar-username">{username}</span>}
+        {username && (
+          <button
+            className="toolbar-username"
+            title="Change display name"
+            onClick={() => setShowRename(true)}
+          >
+            {username}
+          </button>
+        )}
       </div>
+      <div className="session-bar">
+        <span className="session-bar-label">session</span>
+        <SessionPanel
+          getEditorContent={getEditorContent}
+          resetDocAndEditor={resetDocAndEditor}
+          session={session}
+          clearRoomState={clearRoomState}
+        />
+      </div>
+      {showRename && (
+        <ChangeNameModal
+          current={username}
+          onDone={(name) => {
+            onUsernameChange(name);
+            setShowRename(false);
+          }}
+          onCancel={() => setShowRename(false)}
+        />
+      )}
       {session.sessionNotice && (
         <div className={`notice-strip ${session.sessionNotice}`}>
           {SESSION_NOTICE_MESSAGE[session.sessionNotice]}
@@ -380,7 +403,9 @@ function AppContent({ username }: AppContentProps) {
 function App() {
   return (
     <UsernameGate>
-      {(username) => <AppContent username={username} />}
+      {(username, setUsername) => (
+        <AppContent username={username} onUsernameChange={setUsername} />
+      )}
     </UsernameGate>
   );
 }
