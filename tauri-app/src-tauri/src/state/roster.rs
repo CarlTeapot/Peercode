@@ -74,21 +74,21 @@ impl RosterState {
 
     fn room_state_payload(&self) -> RoomStatePayload {
         let peers = self.peers.lock().unwrap();
-        let mut dtos: Vec<PeerDto> = peers
-            .iter()
-            .map(|(id, entry)| PeerDto {
-                client_id: id.to_string(),
-                username: entry.username.clone(),
-                is_host: entry.is_host,
-                can_write: entry.can_write,
-            })
-            .collect();
-        dtos.sort_by(|a, b| {
-            b.is_host
-                .cmp(&a.is_host)
-                .then_with(|| a.client_id.cmp(&b.client_id))
-        });
-        RoomStatePayload { peers: dtos }
+        let mut entries: Vec<(u64, &PeerEntry)> =
+            peers.iter().map(|(id, entry)| (*id, entry)).collect();
+        // Host first, then numeric id order
+        entries.sort_by_key(|(id, entry)| (!entry.is_host, *id));
+        RoomStatePayload {
+            peers: entries
+                .into_iter()
+                .map(|(id, entry)| PeerDto {
+                    client_id: id.to_string(),
+                    username: entry.username.clone(),
+                    is_host: entry.is_host,
+                    can_write: entry.can_write,
+                })
+                .collect(),
+        }
     }
 }
 
@@ -137,12 +137,7 @@ pub fn resync_own_permission(app: &AppHandle, client_id: u64) {
     let Some(can_write) = state.roster.can_write_of(client_id) else {
         return;
     };
-    let access = if can_write {
-        WriteAccess::Editable
-    } else {
-        WriteAccess::ReadOnly
-    };
-    if state.set_write_access(access) {
+    if state.set_write_access(WriteAccess::from_can_write(can_write)) {
         debug!("roster: own permission resynced after join: can_write={can_write}");
         let _ = app.emit(CAN_WRITE_CHANGED, CanWritePayload { can_write });
     }
@@ -160,11 +155,7 @@ async fn apply_own_permission_if_local(app: &AppHandle, subject: ClientId, can_w
     if local_id != subject {
         return;
     }
-    let access = if can_write {
-        WriteAccess::Editable
-    } else {
-        WriteAccess::ReadOnly
-    };
+    let access = WriteAccess::from_can_write(can_write);
     if state.set_write_access(access) {
         debug!("roster: local write access set to {access:?}");
     }

@@ -8,6 +8,16 @@ pub enum WriteAccess {
     Editable,
 }
 
+impl WriteAccess {
+    pub fn from_can_write(can_write: bool) -> Self {
+        if can_write {
+            WriteAccess::Editable
+        } else {
+            WriteAccess::ReadOnly
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum AppRole {
     Undecided,

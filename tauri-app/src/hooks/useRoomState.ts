@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useState, useCallback } from "react";
+import { useTauriEvents } from "./useTauriEvents";
 
 /** client_id is a string: ids are random u64s and JS numbers lose precision. */
 export interface PeerInfo {
@@ -22,30 +22,16 @@ export function useRoomState() {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const clearRoomState = useCallback(() => setRoomState(null), []);
 
-  useEffect(() => {
-    const unlisten: (() => void)[] = [];
-    let cancelled = false;
-
-    void (async () => {
-      const register = (fn: () => void) => {
-        if (cancelled) fn();
-        else unlisten.push(fn);
-      };
-
-      register(
-        await listen<RoomState>("session://room-state", (e) => {
-          setRoomState(e.payload);
-        }),
-      );
-      register(await listen("session://session-ended", clearRoomState));
-      register(await listen("session://disconnected", clearRoomState));
-    })();
-
-    return () => {
-      cancelled = true;
-      unlisten.forEach((fn) => fn());
-    };
-  }, [clearRoomState]);
+  useTauriEvents(
+    useCallback(
+      (on) => {
+        on<RoomState>("session://room-state", setRoomState);
+        on("session://session-ended", clearRoomState);
+        on("session://disconnected", clearRoomState);
+      },
+      [clearRoomState],
+    ),
+  );
 
   return { roomState, clearRoomState };
 }

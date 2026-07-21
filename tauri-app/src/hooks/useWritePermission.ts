@@ -1,6 +1,6 @@
-import { useState, useEffect, type MutableRefObject } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { useState, useEffect, useCallback, type MutableRefObject } from "react";
 import type { editor } from "monaco-editor";
+import { useTauriEvents } from "./useTauriEvents";
 
 interface CanWritePayload {
   can_write: boolean;
@@ -17,32 +17,15 @@ export function useWritePermission(
 ) {
   const [canWrite, setCanWrite] = useState(true);
 
-  useEffect(() => {
-    const unlisten: (() => void)[] = [];
-    let cancelled = false;
-
-    void (async () => {
-      const register = (fn: () => void) => {
-        if (cancelled) fn();
-        else unlisten.push(fn);
-      };
-
-      register(
-        await listen<CanWritePayload>("session://can-write", (e) => {
-          setCanWrite(e.payload.can_write);
-        }),
+  useTauriEvents(
+    useCallback((on) => {
+      on<CanWritePayload>("session://can-write", (payload) =>
+        setCanWrite(payload.can_write),
       );
-      register(
-        await listen("session://session-ended", () => setCanWrite(true)),
-      );
-      register(await listen("session://disconnected", () => setCanWrite(true)));
-    })();
-
-    return () => {
-      cancelled = true;
-      unlisten.forEach((fn) => fn());
-    };
-  }, []);
+      on("session://session-ended", () => setCanWrite(true));
+      on("session://disconnected", () => setCanWrite(true));
+    }, []),
+  );
 
   useEffect(() => {
     editorRef.current?.updateOptions({ readOnly: !canWrite });
