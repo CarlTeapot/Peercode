@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { RoomState, PeerInfo } from "../hooks/useRoomState";
 import "./PeersPanel.css";
@@ -7,6 +7,8 @@ interface PeersPanelProps {
   roomState: RoomState | null;
   /** Whether the local user hosts the session (only hosts see the toggles). */
   isHost: boolean;
+  open: boolean;
+  onClose: () => void;
 }
 
 /**
@@ -15,9 +17,12 @@ interface PeersPanelProps {
  * per guest. Toggles are optimistic-free: the switch flips only when the
  * gateway's authoritative room-state echo arrives.
  */
-export function PeersPanel({ roomState, isHost }: PeersPanelProps) {
-  const [open, setOpen] = useState(false);
-
+export function PeersPanel({
+  roomState,
+  isHost,
+  open,
+  onClose,
+}: PeersPanelProps) {
   const togglePermission = useCallback(async (peer: PeerInfo) => {
     try {
       await invoke("set_peer_permission", {
@@ -29,48 +34,29 @@ export function PeersPanel({ roomState, isHost }: PeersPanelProps) {
     }
   }, []);
 
-  if (!roomState) return null;
+  if (!roomState || !open) return null;
 
-  // The backend emits peers already sorted (host first, then by id).
   const peers = roomState.peers;
 
   return (
-    <>
-      <button
-        className="peers-panel-toggle"
-        onClick={() => setOpen((prev) => !prev)}
-        title="Peers"
-      >
-        👥
-        {peers.length > 0 && <span className="badge">{peers.length}</span>}
-      </button>
-
-      {open && (
-        <div className="peers-panel">
-          <div className="peers-panel-header">
-            <h3>Peers ({peers.length})</h3>
-            <button
-              className="close-btn"
-              onClick={() => setOpen(false)}
-              title="Close"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="peers-list">
-            {peers.map((peer) => (
-              <PeerRow
-                key={peer.client_id}
-                peer={peer}
-                isHost={isHost}
-                onToggle={togglePermission}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </>
+    <div className="peers-panel tui-box">
+      <div className="peers-panel-header">
+        <span className="tui-box-title">peers ({peers.length})</span>
+        <button className="close-btn" onClick={onClose} title="Close">
+          ✕
+        </button>
+      </div>
+      <div className="peers-list">
+        {peers.map((peer) => (
+          <PeerRow
+            key={peer.client_id}
+            peer={peer}
+            isHost={isHost}
+            onToggle={togglePermission}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

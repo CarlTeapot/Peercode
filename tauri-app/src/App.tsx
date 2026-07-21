@@ -9,9 +9,19 @@ import { normalizeToLF, forceModelLF } from "./eol";
 import { UsernameGate } from "./usernameSetup";
 import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
+import { PeersPanel } from "./components/PeersPanel";
+import { StatusLine, type CursorPos } from "./components/StatusLine";
 import { useWritePermission } from "./hooks/useWritePermission";
+import { useSessionEvents, type SessionNotice } from "./hooks/useSessionEvents";
+import { useRoomState } from "./hooks/useRoomState";
+import type { CurrentFileInfo } from "./components/filemenu/format";
 import { PEERCODE_THEME, registerPeercodeTheme } from "./monacoTheme";
 import "./App.css";
+
+const SESSION_NOTICE_MESSAGE: Record<SessionNotice, string> = {
+  ended: "The host ended the session. Your document is preserved.",
+  disconnected: "Connection lost. Your document is preserved locally.",
+};
 
 interface LogEntry {
   id: number;
@@ -62,7 +72,6 @@ interface AppContentProps {
 
 function AppContent({ username }: AppContentProps) {
   const isDevFeaturesEnabled = import.meta.env.VITE_DEV_FEATURES === "true";
-  const [status, setStatus] = useState("loading...");
   const [statusReady, setStatusReady] = useState(false);
   const [eventLog, setEventLog] = useState<LogEntry[]>([]);
   const eventCountRef = useRef(0);
@@ -75,6 +84,19 @@ function AppContent({ username }: AppContentProps) {
   const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const [dirty, setDirty] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
+
+  const session = useSessionEvents();
+  const { roomState, clearRoomState } = useRoomState();
+  const [peersOpen, setPeersOpen] = useState(false);
+  const isHost = session.sessionStatus === "host";
+  const inSession = isHost || session.sessionStatus === "guest";
+
+  useEffect(() => {
+    if (!inSession) setPeersOpen(false);
+  }, [inSession]);
+
+  const [cursor, setCursor] = useState<CursorPos>({ line: 1, col: 1 });
+  const [fileInfo, setFileInfo] = useState<CurrentFileInfo | null>(null);
 
   const enqueueOp = useMemo(() => createEnqueueOp(opChainRef), []);
   const { sendInsert, sendDelete, sendReplace } = useMemo(
@@ -173,7 +195,9 @@ function AppContent({ username }: AppContentProps) {
     forceModelLF(editorInstance, monacoInstance);
 
     installPlainTextPasteHandler(editorInstance);
-    setStatus("editor ready");
+    editorInstance.onDidChangeCursorPosition((e) => {
+      setCursor({ line: e.position.lineNumber, col: e.position.column });
+    });
     setStatusReady(true);
     shadowTextRef.current = editorInstance.getModel()?.getValue() ?? "";
 
@@ -240,7 +264,6 @@ function AppContent({ username }: AppContentProps) {
                   payload: String(error),
                 },
               ]);
-              setStatus("ipc error");
               return;
             }
           }
@@ -260,16 +283,14 @@ function AppContent({ username }: AppContentProps) {
           onDocumentLoaded={handleDocumentLoaded}
           dirty={dirty}
           onSaved={() => setDirty(false)}
+          onCurrentChanged={setFileInfo}
         />
-        {username && <span className="toolbar-username">{username}</span>}
-        {!canWrite && (
-          <span
-            className="readonly-badge"
-            title="The host has made you read-only"
-          >
-            🔒 read-only
-          </span>
-        )}
+        <SessionPanel
+          getEditorContent={getEditorContent}
+          resetDocAndEditor={resetDocAndEditor}
+          session={session}
+          clearRoomState={clearRoomState}
+        />
         {isDevFeaturesEnabled && (
           <button
             onClick={() => void toggleLogging()}
@@ -278,12 +299,13 @@ function AppContent({ username }: AppContentProps) {
             CRDT log {loggingEnabled ? "ON" : "OFF"}
           </button>
         )}
-        <span className={`status ${statusReady ? "ready" : ""}`}>{status}</span>
+        {username && <span className="toolbar-username">{username}</span>}
       </div>
-      <SessionPanel
-        getEditorContent={getEditorContent}
-        resetDocAndEditor={resetDocAndEditor}
-      />
+      {session.sessionNotice && (
+        <div className={`notice-strip ${session.sessionNotice}`}>
+          {SESSION_NOTICE_MESSAGE[session.sessionNotice]}
+        </div>
+      )}
       <div className="editor-container">
         <Editor
           height="100%"
@@ -322,6 +344,28 @@ function AppContent({ username }: AppContentProps) {
           </div>
         ))}
       </div>
+      <StatusLine
+        sessionStatus={session.sessionStatus}
+        roomId={session.roomId}
+        shareUrl={session.publicUrl ?? session.lanUrl}
+        peerCount={roomState?.peers.length ?? 0}
+        inSession={inSession}
+        onPeersClick={() => setPeersOpen((prev) => !prev)}
+        fileName={fileInfo?.name ?? null}
+        dirty={dirty}
+        hadCrlf={fileInfo?.had_crlf ?? false}
+        canWrite={canWrite}
+        statusReady={statusReady}
+        cursor={cursor}
+      />
+      {inSession && (
+        <PeersPanel
+          roomState={roomState}
+          isHost={isHost}
+          open={peersOpen}
+          onClose={() => setPeersOpen(false)}
+        />
+      )}
     </>
   );
 }

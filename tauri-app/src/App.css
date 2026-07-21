@@ -232,16 +232,6 @@ button.pill {
   border-radius: var(--radius);
 }
 
-.readonly-badge {
-  padding: 2px 8px;
-  border-radius: var(--radius);
-  font-size: 11px;
-  color: var(--amber);
-  background: rgba(224, 175, 104, 0.1);
-  border: 1px solid rgba(224, 175, 104, 0.45);
-  user-select: none;
-}
-
 .status {
   padding: 2px 8px;
   border-radius: var(--radius);
