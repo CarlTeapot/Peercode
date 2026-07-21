@@ -1,6 +1,7 @@
 use crate::garbage_collection::SyncMaintenance;
 use crate::processes::types::{CombinedWorkflowResult, Sidecar, SidecarStatus};
 use crate::state::document::DocSender;
+use crate::state::roster::RosterState;
 use crate::state::ws_state::WsState;
 use log::{info, warn};
 #[cfg(debug_assertions)]
@@ -22,6 +23,7 @@ pub struct AppState {
     pub processes: Mutex<HostProcesses>,
     pub current_file: Mutex<Option<CurrentFile>>,
     pub sync_maintenance: SyncMaintenance,
+    pub roster: RosterState,
     #[cfg(debug_assertions)]
     pub crdt_logging_enabled: AtomicBool,
 }
@@ -74,6 +76,7 @@ impl AppState {
             }),
             current_file: Mutex::new(None),
             sync_maintenance: SyncMaintenance::new(),
+            roster: RosterState::default(),
             #[cfg(debug_assertions)]
             crdt_logging_enabled: AtomicBool::new(false),
         }
@@ -81,6 +84,7 @@ impl AppState {
 
     pub fn leave_session(&self, ws: &WsState) {
         self.sync_maintenance.stop_all();
+        self.roster.clear();
         ws.disconnect_nowait();
     }
 

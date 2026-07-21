@@ -9,6 +9,7 @@ import { normalizeToLF, forceModelLF } from "./eol";
 import { UsernameGate } from "./usernameSetup";
 import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
+import { useWritePermission } from "./hooks/useWritePermission";
 import "./App.css";
 
 interface LogEntry {
@@ -79,6 +80,7 @@ function AppContent({ username }: AppContentProps) {
     () => createIpcSenders(enqueueOp),
     [enqueueOp],
   );
+  const canWrite = useWritePermission(editorRef);
 
   // Replaces the whole editor content without echoing ops back to the
   // backend. Normalizes to LF and re-pins the model EOL: on Windows,
@@ -258,6 +260,14 @@ function AppContent({ username }: AppContentProps) {
           onSaved={() => setDirty(false)}
         />
         {username && <span className="toolbar-username">{username}</span>}
+        {!canWrite && (
+          <span
+            className="readonly-badge"
+            title="The host has made you read-only"
+          >
+            🔒 read-only
+          </span>
+        )}
         {isDevFeaturesEnabled && (
           <button
             onClick={() => void toggleLogging()}

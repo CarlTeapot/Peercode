@@ -20,6 +20,14 @@ fn normalize_to_lf(content: String) -> String {
     }
 }
 
+fn ensure_can_write(state: &AppState) -> Result<(), String> {
+    if state.can_write() {
+        Ok(())
+    } else {
+        Err("Write permission denied: the host has made you read-only".into())
+    }
+}
+
 #[tauri::command]
 pub async fn insert(
     state: State<'_, AppState>,
@@ -28,6 +36,7 @@ pub async fn insert(
     content: String,
     base_seq: u64,
 ) -> Result<(), String> {
+    ensure_can_write(&state)?;
     let content = normalize_to_lf(content);
     debug!(
         "crdt insert request: position={}, content_len={}, base_seq={}",
@@ -65,6 +74,7 @@ pub async fn delete(
     length: u64,
     base_seq: u64,
 ) -> Result<(), String> {
+    ensure_can_write(&state)?;
     debug!(
         "crdt delete request: position={}, length={}, base_seq={}",
         position, length, base_seq
@@ -99,6 +109,7 @@ pub async fn replace(
     content: String,
     base_seq: u64,
 ) -> Result<(), String> {
+    ensure_can_write(&state)?;
     let content = normalize_to_lf(content);
     debug!(
         "crdt replace request: position={}, delete_length={}, content_len={}, base_seq={}",

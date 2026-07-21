@@ -89,6 +89,18 @@ body {
   border-radius: 999px;
 }
 
+.readonly-badge {
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--bg-inset);
+  border: 1px solid rgba(232, 161, 60, 0.35);
+  user-select: none;
+}
+
 .status {
   margin-left: auto;
   padding: 3px 12px;
@@ -703,8 +715,25 @@ body {
 
 .session-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
   margin-top: 8px;
+}
+
+.session-guests-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-guests-edit input {
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .session-btn {

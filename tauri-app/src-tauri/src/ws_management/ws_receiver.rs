@@ -1,8 +1,9 @@
 use crdt_core::encode_snapshot;
 use crdt_core::store::StateVector;
 use crdt_core::wire::{
-    decode_membership, decode_sv_report, MembershipEvent, CONTROL_SESSION_ENDED,
-    CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL, PREFIX_MEMBERSHIP, PREFIX_SV_REPORT,
+    decode_membership, decode_peer_info, decode_permission, decode_sv_report, MembershipEvent,
+    CONTROL_SESSION_ENDED, CONTROL_SNAPSHOT_REQUEST, PREFIX_CONTROL, PREFIX_MEMBERSHIP,
+    PREFIX_PEER_INFO, PREFIX_PERMISSION, PREFIX_SV_REPORT,
 };
 use futures_util::StreamExt;
 use log::{debug, error, info, warn};
@@ -14,6 +15,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::state::appstate::AppState;
 use crate::state::document::client::request;
 use crate::state::document::types::DocOp;
+use crate::state::roster;
 use crate::ws_management::ws_types::{DisconnectReason, Stream, WsConnection};
 
 pub async fn receive_loop(
@@ -45,9 +47,11 @@ pub async fn receive_loop(
                         warn!("ws recv: unknown control frame type={:?}; ignoring", other);
                     }
                 },
-                // Host-only coordinator inputs (guests have no gc sender → no-op).
                 Some(PREFIX_MEMBERSHIP) => route_membership(&app, &bytes).await,
+                // Host-only coordinator input (guests have no gc sender → no-op).
                 Some(PREFIX_SV_REPORT) => route_sv_report(&app, &bytes).await,
+                Some(PREFIX_PERMISSION) => route_permission(&app, &bytes).await,
+                Some(PREFIX_PEER_INFO) => route_peer_info(&app, &bytes).await,
                 _ => {
                     debug!("ws receiver binary message (bytes={})", bytes.len());
                     if op_tx.send(bytes.into()).is_err() {
@@ -146,9 +150,24 @@ async fn route_membership(app: &AppHandle, bytes: &[u8]) {
                     .sync_maintenance
                     .peer_left(frame.client_id)
                     .await;
+                roster::apply_peer_left(app, frame.client_id);
             }
         },
         Err(e) => warn!("ws recv: membership decode failed: {e}"),
+    }
+}
+
+async fn route_permission(app: &AppHandle, bytes: &[u8]) {
+    match decode_permission(bytes) {
+        Ok(frame) => roster::apply_permission(app, frame).await,
+        Err(e) => warn!("ws recv: permission decode failed: {e}"),
+    }
+}
+
+async fn route_peer_info(app: &AppHandle, bytes: &[u8]) {
+    match decode_peer_info(bytes) {
+        Ok(frame) => roster::apply_peer_info(app, frame).await,
+        Err(e) => warn!("ws recv: peer-info decode failed: {e}"),
     }
 }
 

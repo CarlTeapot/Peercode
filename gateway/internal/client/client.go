@@ -10,23 +10,34 @@ import (
 
 const sendBufferSize = 256
 
+type Role int32
+
+const (
+	RoleGuest Role = iota
+	RoleHost
+)
+
 type Client struct {
-	ID     string
-	RoomID string
-	conn   *websocket.Conn
-	send   chan []byte
-	closed atomic.Bool
-	host   atomic.Bool
+	ID                  string
+	RoomID              string
+	Username            string
+	HostDefaultCanWrite bool
+	conn                *websocket.Conn
+	send                chan []byte
+	closed              atomic.Bool
+	role                atomic.Int32
+	canWrite            atomic.Bool
 }
 
-func New(id, roomID string, conn *websocket.Conn) *Client {
+func New(id, roomID, username string, conn *websocket.Conn) *Client {
 	c := &Client{
-		ID:     id,
-		RoomID: roomID,
-		conn:   conn,
-		send:   make(chan []byte, sendBufferSize),
+		ID:       id,
+		RoomID:   roomID,
+		Username: username,
+		conn:     conn,
+		send:     make(chan []byte, sendBufferSize),
 	}
-	slog.Info("client created", "room_id", roomID, "client_id", id, "send_buffer_size", sendBufferSize)
+	slog.Info("client created", "room_id", roomID, "client_id", id, "username", username, "send_buffer_size", sendBufferSize)
 	return c
 }
 
@@ -35,16 +46,24 @@ func (c *Client) CloseSend() {
 	close(c.send)
 }
 
-func (c *Client) MarkHost() {
-	c.host.Store(true)
+func (c *Client) SetRole(r Role) {
+	c.role.Store(int32(r))
 }
 
-func (c *Client) ClearHost() {
-	c.host.Store(false)
+func (c *Client) Role() Role {
+	return Role(c.role.Load())
 }
 
 func (c *Client) IsHost() bool {
-	return c != nil && c.host.Load()
+	return c != nil && c.Role() == RoleHost
+}
+
+func (c *Client) SetCanWrite(v bool) {
+	c.canWrite.Store(v)
+}
+
+func (c *Client) CanWrite() bool {
+	return c != nil && c.canWrite.Load()
 }
 
 // returns false without blocking if the send buffer is full

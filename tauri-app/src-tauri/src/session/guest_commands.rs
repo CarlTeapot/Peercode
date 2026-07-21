@@ -1,10 +1,13 @@
+use crate::app_config::identity;
 use crate::session::session_types::{JoinInfo, ProcessesStoppedPayload, PROCESSES_STOPPED};
 use crate::state::appstate::AppState;
 use crate::state::document::{request, DocOp};
+use crate::state::roster;
 use crate::state::ws_state::WsState;
 use crate::ws_management::disconnect_handler::spawn_disconnect_handler;
 use log::{debug, info, warn};
 use tauri::{AppHandle, Emitter, State};
+use url::form_urlencoded::byte_serialize;
 use url::Url;
 
 #[tauri::command]
@@ -40,9 +43,10 @@ pub async fn join_session(
         })?
         .value;
 
+    let username: String = byte_serialize(identity::read_username(&app).as_bytes()).collect();
     let ws_url = format!(
-        "{}/ws?room={}&client_id={}",
-        join_info.server_url, join_info.room_id, guest_client_id
+        "{}/ws?room={}&client_id={}&username={}",
+        join_info.server_url, join_info.room_id, guest_client_id, username
     );
     debug!(
         "join_session attempting websocket connect: room_id={} client_id={}",
@@ -71,6 +75,7 @@ pub async fn join_session(
                 "join_session role transitioned to Guest: room_id={}",
                 join_info.room_id
             );
+            roster::resync_own_permission(&app, guest_client_id);
             state.sync_maintenance.start_guest_sv_reporter(app.clone());
             spawn_disconnect_handler(app, disconnect_rx);
             Ok(())

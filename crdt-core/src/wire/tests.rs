@@ -240,3 +240,115 @@ fn decode_membership_rejects_unknown_event() {
         Err(WireError::MalformedMembership)
     ));
 }
+
+#[test]
+fn permission_round_trips_grant_and_revoke() {
+    for can_write in [true, false] {
+        let frame = PermissionFrame {
+            client_id: ClientId::new(0x0102_0304_0506_0708),
+            can_write,
+        };
+        let bytes = encode_permission(&frame);
+        assert_eq!(bytes.len(), 10);
+        assert_eq!(bytes[0], PREFIX_PERMISSION);
+        assert_eq!(decode_permission(&bytes).expect("decode"), frame);
+    }
+}
+
+#[test]
+fn decode_permission_rejects_wrong_prefix() {
+    let frame = vec![OP_PREFIX, 1, 0, 0, 0, 0, 0, 0, 0, 1];
+    assert!(matches!(
+        decode_permission(&frame),
+        Err(WireError::NotAPermission)
+    ));
+}
+
+#[test]
+fn decode_permission_rejects_bad_length() {
+    let frame = vec![PREFIX_PERMISSION, 1, 0, 0];
+    assert!(matches!(
+        decode_permission(&frame),
+        Err(WireError::MalformedPermission)
+    ));
+}
+
+#[test]
+fn decode_permission_rejects_invalid_flag() {
+    let frame = vec![PREFIX_PERMISSION, 0x02, 0, 0, 0, 0, 0, 0, 0, 1];
+    assert!(matches!(
+        decode_permission(&frame),
+        Err(WireError::MalformedPermission)
+    ));
+}
+
+#[test]
+fn peer_info_round_trips_all_flag_combinations() {
+    for (is_host, can_write) in [(false, false), (false, true), (true, false), (true, true)] {
+        let frame = PeerInfoFrame {
+            client_id: ClientId::new(0x0102_0304_0506_0708),
+            is_host,
+            can_write,
+            username: "alice".to_string(),
+        };
+        let bytes = encode_peer_info(&frame);
+        assert_eq!(bytes[0], PREFIX_PEER_INFO);
+        assert_eq!(decode_peer_info(&bytes).expect("decode"), frame);
+    }
+}
+
+#[test]
+fn peer_info_round_trips_empty_and_unicode_username() {
+    for username in ["", "ალისა 🦀"] {
+        let frame = PeerInfoFrame {
+            client_id: ClientId::new(7),
+            is_host: false,
+            can_write: true,
+            username: username.to_string(),
+        };
+        let bytes = encode_peer_info(&frame);
+        assert_eq!(decode_peer_info(&bytes).expect("decode"), frame);
+    }
+}
+
+#[test]
+fn decode_peer_info_rejects_wrong_prefix() {
+    let frame = vec![OP_PREFIX, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0];
+    assert!(matches!(
+        decode_peer_info(&frame),
+        Err(WireError::NotAPeerInfo)
+    ));
+}
+
+#[test]
+fn decode_peer_info_rejects_truncated_frame() {
+    let frame = vec![PREFIX_PEER_INFO, 0, 0, 0];
+    assert!(matches!(
+        decode_peer_info(&frame),
+        Err(WireError::MalformedPeerInfo)
+    ));
+}
+
+#[test]
+fn decode_peer_info_rejects_username_length_mismatch() {
+    let mut frame = vec![PREFIX_PEER_INFO, 0];
+    frame.extend_from_slice(&7u64.to_be_bytes());
+    frame.push(5);
+    frame.extend_from_slice(b"ab");
+    assert!(matches!(
+        decode_peer_info(&frame),
+        Err(WireError::MalformedPeerInfo)
+    ));
+}
+
+#[test]
+fn decode_peer_info_rejects_invalid_utf8_username() {
+    let mut frame = vec![PREFIX_PEER_INFO, 0];
+    frame.extend_from_slice(&7u64.to_be_bytes());
+    frame.push(2);
+    frame.extend_from_slice(&[0xFF, 0xFE]);
+    assert!(matches!(
+        decode_peer_info(&frame),
+        Err(WireError::MalformedPeerInfo)
+    ));
+}

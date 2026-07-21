@@ -2,6 +2,22 @@ use crate::state::appstate::AppState;
 use log::{info, warn};
 use tauri::{AppHandle, Manager};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WriteAccess {
+    ReadOnly,
+    Editable,
+}
+
+impl WriteAccess {
+    pub fn from_can_write(can_write: bool) -> Self {
+        if can_write {
+            WriteAccess::Editable
+        } else {
+            WriteAccess::ReadOnly
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum AppRole {
     Undecided,
@@ -16,6 +32,7 @@ pub enum AppRole {
     Guest {
         room_id: String,
         server_url: String,
+        write_access: WriteAccess,
     },
 }
 
@@ -126,6 +143,7 @@ impl AppState {
         match self.transition_role(AppRole::Guest {
             room_id,
             server_url,
+            write_access: WriteAccess::ReadOnly,
         }) {
             Ok(_) => {
                 guard.completed = true;
@@ -141,6 +159,26 @@ impl AppState {
 
     pub fn is_host(&self) -> bool {
         matches!(*self.role.lock().unwrap(), AppRole::Host { .. })
+    }
+
+    pub fn can_write(&self) -> bool {
+        match &*self.role.lock().unwrap() {
+            AppRole::Guest { write_access, .. } => *write_access == WriteAccess::Editable,
+            _ => true,
+        }
+    }
+
+    pub fn set_write_access(&self, access: WriteAccess) -> bool {
+        let mut role = self.role.lock().unwrap();
+        if let AppRole::Guest { write_access, .. } = &mut *role {
+            if *write_access != access {
+                info!("guest write access changed: {access:?}");
+            }
+            *write_access = access;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn store_public_url(&self, url: String) {

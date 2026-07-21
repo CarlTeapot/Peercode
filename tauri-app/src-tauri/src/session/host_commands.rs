@@ -1,3 +1,4 @@
+use crate::app_config::identity;
 use crate::gateway::gateway_api::{create_room, destroy_room};
 use crate::processes::process_coordinator;
 use crate::session::session_types::{HostSessionSetup, SessionReadyPayload, SESSION_READY};
@@ -9,10 +10,11 @@ use crate::ws_management::ws_types::DisconnectReason;
 use log::{debug, error, info, warn};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::oneshot;
+use url::form_urlencoded::byte_serialize;
 
 #[tauri::command]
-pub async fn host_session(app: AppHandle) -> Result<(), String> {
-    debug!("start_host_session requested");
+pub async fn host_session(app: AppHandle, guests_can_write: bool) -> Result<(), String> {
+    debug!("start_host_session requested: guests_can_write={guests_can_write}");
 
     let guard = app
         .state::<AppState>()
@@ -25,7 +27,7 @@ pub async fn host_session(app: AppHandle) -> Result<(), String> {
 
     let setup = prepare_host_session(&app).await?;
 
-    let disconnect_rx = connect(&app, setup.port, setup.room_id.clone()).await?;
+    let disconnect_rx = connect(&app, setup.port, setup.room_id.clone(), guests_can_write).await?;
 
     app.state::<AppState>().complete_host(
         guard,
@@ -140,6 +142,7 @@ async fn connect(
     app: &AppHandle,
     port: u16,
     room_id: String,
+    guests_can_write: bool,
 ) -> Result<oneshot::Receiver<DisconnectReason>, String> {
     debug!(
         "host local connect requested: room_id={} port={}",
@@ -150,8 +153,11 @@ async fn connect(
         e
     })?;
 
-    let local_ws_url =
-        format!("ws://127.0.0.1:{port}/ws?room={room_id}&client_id={host_client_id}");
+    let username: String = byte_serialize(identity::read_username(app).as_bytes()).collect();
+    let local_ws_url = format!(
+        "ws://127.0.0.1:{port}/ws?room={room_id}&client_id={host_client_id}\
+         &username={username}&default_can_write={guests_can_write}"
+    );
     let ws = app.state::<WsState>();
     let disconnect_rx = ws
         .connect(&local_ws_url, room_id.clone(), app.clone())

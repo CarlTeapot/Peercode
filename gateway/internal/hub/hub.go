@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/coder/websocket"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+
+	"github.com/coder/websocket"
 
 	"gateway/internal/client"
 	gatewaymetrics "gateway/internal/metrics"
@@ -131,20 +134,44 @@ func (h *Hub) unregister(c *client.Client, r *room.Room) {
 	r.Leave(c, func() { h.discardIfStale(r.ID, r) })
 }
 
-func readWSParams(w http.ResponseWriter, r *http.Request) (roomID, clientID string, ok bool) {
-	roomID = r.URL.Query().Get("room")
+type wsParams struct {
+	roomID          string
+	clientID        string
+	username        string
+	defaultCanWrite bool
+}
+
+func readWSParams(w http.ResponseWriter, r *http.Request) (wsParams, bool) {
+	roomID := r.URL.Query().Get("room")
 	if roomID == "" {
 		slog.Warn("websocket rejected: missing room parameter")
 		http.Error(w, "missing ?room= parameter", http.StatusBadRequest)
-		return "", "", false
+		return wsParams{}, false
 	}
-	clientID = r.URL.Query().Get("client_id")
+	clientID := r.URL.Query().Get("client_id")
 	if clientID == "" {
 		slog.Warn("websocket rejected: missing client_id parameter", "room_id", roomID)
 		http.Error(w, "missing ?client_id= parameter", http.StatusBadRequest)
-		return "", "", false
+		return wsParams{}, false
 	}
-	return roomID, clientID, true
+	return wsParams{
+		roomID:          roomID,
+		clientID:        clientID,
+		username:        sanitizeUsername(r.URL.Query().Get("username")),
+		defaultCanWrite: r.URL.Query().Get("default_can_write") == "true",
+	}, true
+}
+
+func sanitizeUsername(raw string) string {
+	valid := strings.ToValidUTF8(raw, "")
+	if len(valid) <= wire.MaxUsernameBytes {
+		return valid
+	}
+	cut := wire.MaxUsernameBytes
+	for cut > 0 && !utf8.RuneStart(valid[cut]) {
+		cut--
+	}
+	return valid[:cut]
 }
 
 func (h *Hub) dispatchFrame(rm *room.Room, sender *client.Client, raw []byte) {
@@ -215,10 +242,11 @@ func (h *Hub) HandleEndSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
-	roomID, clientID, ok := readWSParams(w, r)
+	params, ok := readWSParams(w, r)
 	if !ok {
 		return
 	}
+	roomID, clientID := params.roomID, params.clientID
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
@@ -230,7 +258,8 @@ func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(maxInboundMessageBytes)
 	slog.Info("websocket upgraded", "room_id", roomID, "client_id", clientID)
 
-	c := client.New(clientID, roomID, conn)
+	c := client.New(clientID, roomID, params.username, conn)
+	c.HostDefaultCanWrite = params.defaultCanWrite
 	rm, err := h.register(c)
 	if err != nil {
 		if errors.Is(err, room.ErrDuplicateClientID) {
