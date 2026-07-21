@@ -14,7 +14,7 @@
 
   --text-1: #c0caf5;
   --text-2: #a9b1d6;
-  --text-3: #565f89;
+  --text-3: #737aa2;
 
   --accent: #bb9af7;
   --accent-hover: #cbb1fa;
@@ -109,6 +109,28 @@ body {
 .btn-danger:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Keyboard focus: one shared ring for every interactive element */
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-danger:focus-visible,
+button.pill:focus-visible,
+.sl-seg:focus-visible,
+.file-menu-btn:focus-visible,
+.file-dropdown-item:focus-visible,
+.file-dropdown-btn:focus-visible,
+.file-dropdown-doc-name:focus-visible,
+.file-dropdown-doc-action:focus-visible,
+.crdt-log-btn:focus-visible,
+.log-header:focus-visible,
+.modal-btn:focus-visible,
+.perm-toggle:focus-visible,
+.metrics-popup-close:focus-visible,
+.close-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow);
 }
 
 .pill {
