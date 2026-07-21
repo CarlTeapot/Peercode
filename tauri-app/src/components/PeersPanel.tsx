@@ -76,20 +76,14 @@ function PeerRow({ peer, isHost, onToggle }: PeerRowProps) {
       <div className={`peer-avatar ${peer.is_host ? "host" : "guest"}`}>
         {initial}
       </div>
-
       <div className="peer-info">
         <div className="peer-name">{displayName}</div>
-        <div className={`peer-role ${peer.is_host ? "host-role" : ""}`}>
-          {peer.is_host ? "Host" : "Guest"}
-        </div>
       </div>
-
+      {peer.is_host && <span className="pill pill-host">host</span>}
       {showToggle ? (
         <div className="perm-control">
-          <span
-            className={`perm-label ${peer.can_write ? "write" : "readonly"}`}
-          >
-            {peer.can_write ? "Can Edit" : "Read Only"}
+          <span className={`pill ${peer.can_write ? "pill-edit" : "pill-off"}`}>
+            {peer.can_write ? "can edit" : "read only"}
           </span>
           <button
             className={`perm-toggle ${peer.can_write ? "can-write" : "read-only"}`}
@@ -102,9 +96,13 @@ function PeerRow({ peer, isHost, onToggle }: PeerRowProps) {
           </button>
         </div>
       ) : (
-        <span className={`perm-badge ${peer.can_write ? "write" : "readonly"}`}>
-          {peer.can_write ? "Can Edit" : "Read Only"}
-        </span>
+        !peer.is_host && (
+          <span
+            className={`pill ${peer.can_write ? "pill-edit" : "pill-readonly"}`}
+          >
+            {peer.can_write ? "can edit" : "read only"}
+          </span>
+        )
       )}
     </div>
   );
