@@ -150,35 +150,39 @@ export function SessionPanel({
     <div className="session-controls">
       {sessionStatus === "idle" && (
         <>
-          <button
-            className="btn-primary"
-            onClick={() => void handleHost()}
-            disabled={sessionBusy}
-          >
-            {sessionBusy ? "starting…" : "Host"}
-          </button>
-          {!sessionBusy && (
-            <button className="btn" onClick={handleJoinClick}>
-              Join
-            </button>
-          )}
-          {!sessionBusy && (
-            <label
-              className="session-guests-edit"
-              title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+          <div className="session-group">
+            <button
+              className="btn-primary"
+              onClick={() => void handleHost()}
+              disabled={sessionBusy}
             >
-              <input
-                type="checkbox"
-                checked={guestsCanWrite}
-                onChange={(e) => setGuestsCanWrite(e.target.checked)}
-              />
-              guests can edit
-            </label>
-          )}
-          {anyProcessRunning && (
-            <button className="btn-danger" onClick={handleKillProcesses}>
-              Kill Processes
+              {sessionBusy ? "starting…" : "Host"}
             </button>
+            {!sessionBusy && (
+              <button className="btn" onClick={handleJoinClick}>
+                Join
+              </button>
+            )}
+            {!sessionBusy && (
+              <label
+                className="session-guests-edit"
+                title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+              >
+                <input
+                  type="checkbox"
+                  checked={guestsCanWrite}
+                  onChange={(e) => setGuestsCanWrite(e.target.checked)}
+                />
+                guests can edit
+              </label>
+            )}
+          </div>
+          {anyProcessRunning && (
+            <div className="session-group session-group-end">
+              <button className="btn-danger" onClick={handleKillProcesses}>
+                Kill Processes
+              </button>
+            </div>
           )}
         </>
       )}
@@ -186,7 +190,7 @@ export function SessionPanel({
         <span className="pill pill-off">starting…</span>
       )}
       {isHost && anyProcessRunning && (
-        <>
+        <div className="session-group">
           {processesRunning.gateway === "Enabled" && (
             <button
               type="button"
@@ -209,34 +213,42 @@ export function SessionPanel({
               tunnel
             </button>
           )}
-        </>
+        </div>
       )}
-      {isHost && publicUrl && (
-        <button
-          className="btn"
-          onClick={() => void copyUrl("public", publicUrl)}
-        >
-          {copied === "public" ? "copied" : "Copy Public"}
-        </button>
-      )}
-      {isHost && lanUrl && (
-        <button className="btn" onClick={() => void copyUrl("lan", lanUrl)}>
-          {copied === "lan" ? "copied" : "Copy LAN"}
-        </button>
+      {isHost && (publicUrl || lanUrl) && (
+        <div className="session-group">
+          {publicUrl && (
+            <button
+              className="btn"
+              onClick={() => void copyUrl("public", publicUrl)}
+            >
+              {copied === "public" ? "copied ✓" : "Copy Public URL"}
+            </button>
+          )}
+          {lanUrl && (
+            <button className="btn" onClick={() => void copyUrl("lan", lanUrl)}>
+              {copied === "lan" ? "copied ✓" : "Copy Local URL"}
+            </button>
+          )}
+        </div>
       )}
       {isHost && (
-        <button
-          className="btn-danger"
-          disabled={sessionBusy}
-          onClick={handleEndSession}
-        >
-          {sessionBusy ? "ending…" : "End Session"}
-        </button>
+        <div className="session-group session-group-end">
+          <button
+            className="btn-danger"
+            disabled={sessionBusy}
+            onClick={handleEndSession}
+          >
+            {sessionBusy ? "ending…" : "End Session"}
+          </button>
+        </div>
       )}
       {sessionStatus === "guest" && (
-        <button className="btn-danger" onClick={handleLeaveSession}>
-          Leave
-        </button>
+        <div className="session-group session-group-end">
+          <button className="btn-danger" onClick={handleLeaveSession}>
+            Leave
+          </button>
+        </div>
       )}
       {showGatewayMetrics && isHost && (
         <MetricsPopup

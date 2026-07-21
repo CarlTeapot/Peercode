@@ -137,9 +137,9 @@ button.pill:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: var(--radius);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.6;
   white-space: nowrap;
@@ -202,7 +202,7 @@ button.pill {
   padding: 0 6px;
   background: var(--bg-raised);
   color: var(--text-3);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.4;
   text-transform: lowercase;
   user-select: none;
@@ -249,7 +249,7 @@ button.pill {
   margin-left: auto;
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   padding: 3px 10px;
   background: var(--bg-inset);
   border: 1px solid var(--border);
@@ -294,7 +294,7 @@ button.pill {
 
 .session-bar-label {
   color: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-transform: lowercase;
   letter-spacing: 0.08em;
   user-select: none;
@@ -305,13 +305,37 @@ button.pill {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.session-group + .session-group {
+  border-left: 1px solid var(--border);
+  margin-left: 6px;
+  padding-left: 14px;
+}
+
+.session-group-end {
+  margin-left: auto;
+}
+
+.session-group-end.session-group {
+  border-left: none;
+  padding-left: 0;
 }
 
 .session-guests-edit {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-2);
   cursor: pointer;
   user-select: none;
@@ -351,9 +375,9 @@ button.pill {
   width: 100%;
   text-align: left;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--text-3);
-  padding: 4px 16px;
+  padding: 5px 16px;
   background: var(--bg-panel);
   border: none;
   border-top: 1px solid var(--border);
@@ -636,7 +660,7 @@ button.pill {
 }
 
 .file-dropdown-doc-path {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--text-3);
   opacity: 0.8;
   overflow: hidden;
