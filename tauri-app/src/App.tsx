@@ -253,6 +253,7 @@ function AppContent({ username }: AppContentProps) {
       <div className="toolbar">
         <span className="toolbar-brand">
           Peer<span className="toolbar-brand-accent">Code</span>
+          <span className="brand-cursor">▍</span>
         </span>
         <FileMenu
           onDocumentLoaded={handleDocumentLoaded}
