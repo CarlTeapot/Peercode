@@ -96,9 +96,9 @@
 .metrics-popup-unavailable {
   margin-top: 16px;
   padding: 14px;
-  border: 1px solid rgba(247, 118, 142, 0.45);
+  border: 1px solid var(--red-border);
   border-radius: var(--radius);
-  background: rgba(247, 118, 142, 0.08);
+  background: var(--red-soft);
   color: var(--red);
   text-align: center;
 }

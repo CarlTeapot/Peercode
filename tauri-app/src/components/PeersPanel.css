@@ -131,7 +131,7 @@
 }
 
 .perm-toggle.can-write {
-  background: rgba(158, 206, 106, 0.25);
+  background: var(--green-soft);
   border-color: var(--green);
 }
 

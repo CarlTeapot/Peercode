@@ -20,6 +20,9 @@ interface StatusLineProps {
   canWrite: boolean;
   statusReady: boolean;
   cursor: CursorPos;
+  fontSize: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 }
 
 /**
@@ -39,6 +42,9 @@ export function StatusLine({
   canWrite,
   statusReady,
   cursor,
+  fontSize,
+  onZoomIn,
+  onZoomOut,
 }: StatusLineProps) {
   const [copied, setCopied] = useState(false);
 
@@ -110,6 +116,23 @@ export function StatusLine({
         )}
         <span className="sl-seg" title={connTitle}>
           <span className={`sl-conn-dot ${connClass}`} />
+        </span>
+        <span className="sl-seg sl-zoom">
+          <button
+            className="sl-zoom-btn"
+            onClick={onZoomOut}
+            title="Decrease editor font size (Ctrl+-)"
+          >
+            −
+          </button>
+          <span className="sl-muted">{fontSize}px</span>
+          <button
+            className="sl-zoom-btn"
+            onClick={onZoomIn}
+            title="Increase editor font size (Ctrl+=)"
+          >
+            +
+          </button>
         </span>
         <span className="sl-seg sl-muted">{hadCrlf ? "CRLF" : "LF"}</span>
         <span className="sl-seg sl-muted">

@@ -25,10 +25,62 @@
   --amber: #e0af68;
   --red: #f7768e;
 
+  --accent-border: rgba(187, 154, 247, 0.45);
+  --green-soft: rgba(158, 206, 106, 0.1);
+  --green-border: rgba(158, 206, 106, 0.45);
+  --amber-soft: rgba(224, 175, 104, 0.1);
+  --amber-border: rgba(224, 175, 104, 0.45);
+  --red-soft: rgba(247, 118, 142, 0.1);
+  --red-border: rgba(247, 118, 142, 0.45);
+  --blue-soft: rgba(122, 162, 247, 0.1);
+  --blue-border: rgba(122, 162, 247, 0.45);
+
+  --bg-btn: #2e2d3f;
   --radius: 3px;
+  --radius-btn: 5px;
   --radius-panel: 4px;
   --shadow-pop: 0 4px 10px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
   --focus-glow: 0 0 0 1px var(--accent-soft), 0 0 8px rgba(187, 154, 247, 0.15);
+}
+
+/* Light theme — same system, inverted surfaces. Monaco side: peercode-light. */
+:root[data-theme="light"] {
+  --bg-app: #f4f2fb;
+  --bg-panel: #ece9f6;
+  --bg-inset: #e4e1f0;
+  --bg-raised: #ffffff;
+  --bg-hover: #dcd8ec;
+
+  --border: #ccc7e0;
+  --border-strong: #b4aed0;
+
+  --text-1: #2e2a45;
+  --text-2: #4a4568;
+  --text-3: #7a749c;
+
+  --accent: #7c5fd3;
+  --accent-hover: #6b4ec2;
+  --accent-soft: rgba(124, 95, 211, 0.12);
+  --blue: #2e7de9;
+  --cyan: #007197;
+  --green: #587539;
+  --amber: #8c6c3e;
+  --red: #c64343;
+
+  --accent-border: rgba(124, 95, 211, 0.5);
+  --green-soft: rgba(88, 117, 57, 0.12);
+  --green-border: rgba(88, 117, 57, 0.5);
+  --amber-soft: rgba(140, 108, 62, 0.12);
+  --amber-border: rgba(140, 108, 62, 0.5);
+  --red-soft: rgba(198, 67, 67, 0.1);
+  --red-border: rgba(198, 67, 67, 0.5);
+  --blue-soft: rgba(46, 125, 233, 0.1);
+  --blue-border: rgba(46, 125, 233, 0.5);
+
+  --bg-btn: #ffffff;
+  --shadow-pop:
+    0 4px 10px rgba(46, 42, 80, 0.12), 0 12px 32px rgba(46, 42, 80, 0.18);
+  --focus-glow: 0 0 0 1px var(--accent-soft), 0 0 8px rgba(124, 95, 211, 0.2);
 }
 
 * {
@@ -61,7 +113,7 @@ body {
   font-size: 13px;
   font-weight: 500;
   padding: 6px 16px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-btn);
   cursor: pointer;
   transition:
     background 0.12s,
@@ -70,15 +122,18 @@ body {
 }
 
 .btn {
-  background: transparent;
+  background: var(--bg-btn);
   border: 1px solid var(--border-strong);
-  color: var(--text-2);
+  color: var(--text-1);
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.btn:active:not(:disabled) {
+  background: var(--bg-hover);
 }
 
 .btn-primary {
@@ -94,13 +149,13 @@ body {
 }
 
 .btn-danger {
-  background: transparent;
-  border: 1px solid rgba(247, 118, 142, 0.45);
+  background: var(--bg-btn);
+  border: 1px solid var(--red-border);
   color: var(--red);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: rgba(247, 118, 142, 0.1);
+  background: var(--red-soft);
   border-color: var(--red);
 }
 
@@ -147,26 +202,26 @@ button.pill:focus-visible,
 
 .pill-host {
   background: var(--accent-soft);
-  border: 1px solid rgba(187, 154, 247, 0.45);
+  border: 1px solid var(--accent-border);
   color: var(--accent);
 }
 
 .pill-edit,
 .pill-gateway {
-  background: rgba(158, 206, 106, 0.1);
-  border: 1px solid rgba(158, 206, 106, 0.45);
+  background: var(--green-soft);
+  border: 1px solid var(--green-border);
   color: var(--green);
 }
 
 .pill-readonly {
-  background: rgba(224, 175, 104, 0.1);
-  border: 1px solid rgba(224, 175, 104, 0.45);
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-border);
   color: var(--amber);
 }
 
 .pill-tunnel {
-  background: rgba(122, 162, 247, 0.1);
-  border: 1px solid rgba(122, 162, 247, 0.45);
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-border);
   color: var(--blue);
 }
 
@@ -265,6 +320,33 @@ button.pill {
   border-color: var(--accent);
 }
 
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  width: 28px;
+  height: 26px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow);
+}
+
 .crdt-log-btn {
   background: transparent;
   border: 1px solid var(--border-strong);
@@ -277,7 +359,7 @@ button.pill {
 }
 
 .crdt-log-btn.on {
-  background: rgba(158, 206, 106, 0.1);
+  background: var(--green-soft);
   border-color: var(--green);
   color: var(--green);
 }
@@ -354,12 +436,12 @@ button.pill {
 }
 
 .notice-strip.ended {
-  background: rgba(224, 175, 104, 0.08);
+  background: var(--amber-soft);
   color: var(--amber);
 }
 
 .notice-strip.disconnected {
-  background: rgba(247, 118, 142, 0.08);
+  background: var(--red-soft);
   color: var(--red);
 }
 
@@ -578,9 +660,9 @@ button.pill {
 
 .file-dropdown-btn {
   border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--text-2);
-  border-radius: var(--radius);
+  background: var(--bg-btn);
+  color: var(--text-1);
+  border-radius: var(--radius-btn);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -696,8 +778,8 @@ button.pill {
   padding: 7px 10px;
   color: var(--red);
   font-size: 12px;
-  background: rgba(247, 118, 142, 0.1);
-  border: 1px solid rgba(247, 118, 142, 0.3);
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
   border-radius: var(--radius);
   word-break: break-word;
 }
@@ -781,7 +863,7 @@ button.pill {
 
 .modal-btn {
   border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-btn);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 13.5px;
@@ -804,19 +886,19 @@ button.pill {
 }
 
 .modal-btn.danger {
-  background: transparent;
-  border: 1px solid rgba(247, 118, 142, 0.45);
+  background: var(--bg-btn);
+  border: 1px solid var(--red-border);
   color: var(--red);
   font-weight: 500;
 }
 
 .modal-btn.danger:hover:not(:disabled) {
-  background: rgba(247, 118, 142, 0.1);
+  background: var(--red-soft);
   border-color: var(--red);
 }
 
 .modal-btn.neutral {
-  background: transparent;
+  background: var(--bg-btn);
   border: 1px solid var(--border-strong);
   color: var(--text-2);
   font-weight: 500;

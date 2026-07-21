@@ -1,9 +1,20 @@
 import type { Monaco } from "@monaco-editor/react";
 
 export const PEERCODE_THEME = "peercode-dark";
+export const PEERCODE_LIGHT_THEME = "peercode-light";
 
-/** Tokyo Night-flavored Monaco theme matching the app's CSS tokens. */
-export function registerPeercodeTheme(monaco: Monaco) {
+export type ThemeMode = "dark" | "light";
+
+export function monacoThemeFor(mode: ThemeMode): string {
+  return mode === "light" ? PEERCODE_LIGHT_THEME : PEERCODE_THEME;
+}
+
+/**
+ * Registers both PeerCode Monaco themes. The editor backgrounds must stay in
+ * sync with the `--bg-app` CSS token of the matching `data-theme` block in
+ * App.css so chrome and editor read as one continuous surface.
+ */
+export function registerPeercodeThemes(monaco: Monaco) {
   monaco.editor.defineTheme(PEERCODE_THEME, {
     base: "vs-dark",
     inherit: true,
@@ -41,6 +52,46 @@ export function registerPeercodeTheme(monaco: Monaco) {
       "scrollbarSlider.background": "#33324466",
       "scrollbarSlider.hoverBackground": "#43425999",
       "scrollbarSlider.activeBackground": "#434259cc",
+    },
+  });
+
+  monaco.editor.defineTheme(PEERCODE_LIGHT_THEME, {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "", foreground: "3b3a52" },
+      { token: "comment", foreground: "9a94b8", fontStyle: "italic" },
+      { token: "keyword", foreground: "7c5fd3" },
+      { token: "operator", foreground: "007197" },
+      { token: "delimiter", foreground: "4a4568" },
+      { token: "string", foreground: "587539" },
+      { token: "number", foreground: "b15c00" },
+      { token: "constant", foreground: "b15c00" },
+      { token: "type", foreground: "007197" },
+      { token: "namespace", foreground: "007197" },
+      { token: "function", foreground: "2e7de9" },
+      { token: "variable", foreground: "3b3a52" },
+      { token: "tag", foreground: "c64343" },
+      { token: "attribute.name", foreground: "7c5fd3" },
+    ],
+    colors: {
+      "editor.background": "#f4f2fb",
+      "editor.foreground": "#3b3a52",
+      "editor.lineHighlightBackground": "#e9e6f5",
+      "editor.selectionBackground": "#cdc4ee",
+      "editor.inactiveSelectionBackground": "#dfdaf0",
+      "editorCursor.foreground": "#2e2a45",
+      "editorLineNumber.foreground": "#b4aed0",
+      "editorLineNumber.activeForeground": "#7a749c",
+      "editorIndentGuide.background1": "#e4e1f0",
+      "editorWidget.background": "#ffffff",
+      "editorWidget.border": "#ccc7e0",
+      "editorSuggestWidget.selectedBackground": "#e4e1f0",
+      "editorHoverWidget.background": "#ffffff",
+      "editorGutter.background": "#f4f2fb",
+      "scrollbarSlider.background": "#ccc7e066",
+      "scrollbarSlider.hoverBackground": "#b4aed099",
+      "scrollbarSlider.activeBackground": "#b4aed0cc",
     },
   });
 }

@@ -12,10 +12,12 @@ import { SessionPanel } from "./components/SessionPanel";
 import { PeersPanel } from "./components/PeersPanel";
 import { StatusLine, type CursorPos } from "./components/StatusLine";
 import { useWritePermission } from "./hooks/useWritePermission";
+import { useTheme } from "./hooks/useTheme";
+import { useEditorFontSize } from "./hooks/useEditorFontSize";
 import { useSessionEvents, type SessionNotice } from "./hooks/useSessionEvents";
 import { useRoomState } from "./hooks/useRoomState";
 import type { CurrentFileInfo } from "./components/filemenu/format";
-import { PEERCODE_THEME, registerPeercodeTheme } from "./monacoTheme";
+import { monacoThemeFor, registerPeercodeThemes } from "./monacoTheme";
 import "./App.css";
 
 const SESSION_NOTICE_MESSAGE: Record<SessionNotice, string> = {
@@ -79,6 +81,8 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [showRename, setShowRename] = useState(false);
+  const { theme, toggleTheme } = useTheme();
+  const { fontSize, zoomIn, zoomOut } = useEditorFontSize();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const isApplyingRemote = useRef(false);
@@ -305,6 +309,15 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
             {username}
           </button>
         )}
+        <button
+          className="theme-toggle"
+          title={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          onClick={toggleTheme}
+        >
+          ◐
+        </button>
       </div>
       <div className="session-bar">
         <span className="session-bar-label">session</span>
@@ -335,11 +348,11 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
           height="100%"
           defaultLanguage="rust"
           defaultValue=""
-          theme={PEERCODE_THEME}
-          beforeMount={registerPeercodeTheme}
+          theme={monacoThemeFor(theme)}
+          beforeMount={registerPeercodeThemes}
           onMount={handleEditorMount}
           options={{
-            fontSize: 14,
+            fontSize,
             fontFamily:
               '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
             automaticLayout: true,
@@ -387,6 +400,9 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
         canWrite={canWrite}
         statusReady={statusReady}
         cursor={cursor}
+        fontSize={fontSize}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
       />
       {inSession && (
         <PeersPanel

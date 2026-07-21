@@ -105,3 +105,32 @@ button.sl-seg:hover {
 .sl-muted {
   color: var(--text-3);
 }
+
+.sl-zoom {
+  gap: 2px;
+}
+
+.sl-zoom-btn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+
+.sl-zoom-btn:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.sl-zoom-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-glow);
+}
