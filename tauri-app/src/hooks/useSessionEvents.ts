@@ -46,6 +46,7 @@ export function useSessionEvents() {
   }, [sessionStatus]);
   const [lanUrl, setLanUrl] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
   const [processesRunning, setProcessesRunning] =
     useState<ProcessStatus>(IDLE_PROCESSES);
   const [sessionNotice, setSessionNotice] = useState<SessionNotice | null>(
@@ -58,6 +59,7 @@ export function useSessionEvents() {
     setSessionStatus("idle");
     setLanUrl(null);
     setPublicUrl(null);
+    setRoomId(null);
     setProcessesRunning(IDLE_PROCESSES);
     setSessionBusy(false);
   }, []);
@@ -93,6 +95,8 @@ export function useSessionEvents() {
         );
       }
 
+      setRoomId(info.room_id);
+
       const lanRoomUrl =
         info.lan_url && info.room_id
           ? `${info.lan_url}?room=${info.room_id}`
@@ -126,6 +130,7 @@ export function useSessionEvents() {
               : e.payload.local_room_url,
           );
           setPublicUrl(e.payload.public_room_url);
+          setRoomId(e.payload.room_id);
           setProcessesRunning({
             gateway: "Enabled",
             tunnel: e.payload.public_url !== null ? "Enabled" : "Disabled",
@@ -172,6 +177,7 @@ export function useSessionEvents() {
     lanUrl,
     publicUrl,
     setPublicUrl,
+    roomId,
     processesRunning,
     setProcessesRunning,
     sessionNotice,

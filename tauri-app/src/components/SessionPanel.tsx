@@ -1,39 +1,33 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  useSessionEvents,
-  type SessionNotice,
-} from "../hooks/useSessionEvents";
+import type { useSessionEvents } from "../hooks/useSessionEvents";
 import { useMetrics } from "../hooks/useMetrics";
-import { useRoomState } from "../hooks/useRoomState";
 import { MetricsPopup } from "./MetricsPopup";
-import { PeersPanel } from "./PeersPanel";
 import { SaveBeforeSessionModal } from "./SaveBeforeSessionModal";
 import { JoinModal } from "./JoinModal";
 
-const SESSION_NOTICE_MESSAGE: Record<SessionNotice, string> = {
-  ended: "⚠ The host ended the session. Your document is preserved.",
-  disconnected: "⚠ Connection lost. Your document is preserved locally.",
-};
+export type SessionState = ReturnType<typeof useSessionEvents>;
 
 interface SessionPanelProps {
   /** Current editor text; used to warn before joining discards it. */
   getEditorContent: () => string;
   /** Clear the CRDT document and the editor (before joining a session). */
   resetDocAndEditor: () => Promise<void>;
+  /** Session lifecycle state owned by App. */
+  session: SessionState;
+  clearRoomState: () => void;
 }
 
 /**
- * Session status bar: share URLs, sidecar health chips, host/join/end
- * controls and the related modals.
- *
- * Hosting keeps the currently open document — the host seeds joiners with
- * its snapshot, so an opened .pcdoc becomes the session content. Joining
- * replaces the local document, hence the save prompt.
+ * Session controls cluster rendered inside the toolbar: host/join/end/leave
+ * buttons, sidecar health pills, copy-URL actions and the related modals.
+ * Status readouts live in the StatusLine; transient notices in App.
  */
 export function SessionPanel({
   getEditorContent,
   resetDocAndEditor,
+  session,
+  clearRoomState,
 }: SessionPanelProps) {
   const {
     sessionStatus,
@@ -43,17 +37,15 @@ export function SessionPanel({
     setPublicUrl,
     processesRunning,
     setProcessesRunning,
-    sessionNotice,
     sessionBusy,
     setSessionBusy,
     applyIdleSessionState,
-  } = useSessionEvents();
+  } = session;
 
   const { gatewayFields, gatewayUnavailable, tunnelFields, tunnelUnavailable } =
     useMetrics(sessionStatus, processesRunning);
-  const { roomState, clearRoomState } = useRoomState();
 
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showGatewayMetrics, setShowGatewayMetrics] = useState(false);
@@ -61,7 +53,6 @@ export function SessionPanel({
   const [guestsCanWrite, setGuestsCanWrite] = useState(false);
 
   const isHost = sessionStatus === "host";
-  const inSession = isHost || sessionStatus === "guest";
 
   useEffect(() => {
     if (!isHost) {
@@ -73,11 +64,11 @@ export function SessionPanel({
   const copyUrl = useCallback(async (label: string, url: string) => {
     try {
       await navigator.clipboard.writeText(url);
-      setCopyStatus(`${label} URL copied`);
+      setCopied(label);
     } catch {
-      setCopyStatus(`Failed to copy ${label} URL`);
+      setCopied(null);
     }
-    window.setTimeout(() => setCopyStatus(null), 1500);
+    window.setTimeout(() => setCopied(null), 1500);
   }, []);
 
   const handleHost = useCallback(async () => {
@@ -156,132 +147,108 @@ export function SessionPanel({
     processesRunning.tunnel === "Enabled";
 
   return (
-    <div className="session-panel">
-      <div className="session-panel-row">
-        <span>
-          <span className="session-label">Session: </span>
-          <span
-            className={
-              "session-status-value" +
-              (sessionStatus.startsWith("error") ? " error" : "")
-            }
-          >
-            {sessionStatus}
-          </span>
-        </span>
-        {anyProcessRunning && (
-          <span className="session-chips">
-            {processesRunning.gateway === "Enabled" && (
-              <button
-                type="button"
-                className={
-                  "session-chip gateway" + (isHost ? " clickable" : "")
-                }
-                onClick={() => {
-                  if (isHost) setShowGatewayMetrics(true);
-                }}
-                title={isHost ? "Show PeerCode gateway health" : undefined}
-              >
-                <span className="session-chip-dot" />
-                gateway
-              </button>
-            )}
-            {processesRunning.tunnel === "Enabled" && (
-              <button
-                type="button"
-                className={"session-chip tunnel" + (isHost ? " clickable" : "")}
-                onClick={() => {
-                  if (isHost) setShowTunnelMetrics(true);
-                }}
-                title={isHost ? "Show Cloudflare tunnel health" : undefined}
-              >
-                <span className="session-chip-dot" />
-                tunnel
-              </button>
-            )}
-          </span>
-        )}
-      </div>
-      {lanUrl && (
-        <div className="session-url-row">
-          <span className="session-label">LAN: </span>
-          <span className="session-url">{lanUrl}</span>
-          <button
-            className="session-copy-btn"
-            onClick={() => void copyUrl("LAN", lanUrl)}
-          >
-            Copy
-          </button>
-        </div>
-      )}
-      {publicUrl && (
-        <div className="session-url-row">
-          <span className="session-label">Public: </span>
-          <span className="session-url">{publicUrl}</span>
-          <button
-            className="session-copy-btn"
-            onClick={() => void copyUrl("Public", publicUrl)}
-          >
-            Copy
-          </button>
-        </div>
-      )}
-      {copyStatus && <div className="session-copy-status">{copyStatus}</div>}
-      {sessionStatus === "starting" && (
-        <span className="session-starting-note">starting session...</span>
-      )}
-      {sessionStatus === "idle" && anyProcessRunning && (
-        <button className="session-btn kill" onClick={handleKillProcesses}>
-          ⏹ Kill Processes
-        </button>
-      )}
+    <div className="session-controls">
       {sessionStatus === "idle" && (
-        <div className="session-actions">
-          <button
-            className="session-btn host"
-            onClick={() => void handleHost()}
-            disabled={sessionBusy}
-          >
-            {sessionBusy ? "⏳ Starting…" : "⚡ Host Session"}
-          </button>
-          {!sessionBusy && (
-            <button className="session-btn join" onClick={handleJoinClick}>
-              🔗 Join Session
+        <>
+          <div className="session-group">
+            <button
+              className="btn-primary"
+              onClick={() => void handleHost()}
+              disabled={sessionBusy}
+            >
+              {sessionBusy ? "starting…" : "Host"}
+            </button>
+            {!sessionBusy && (
+              <button className="btn" onClick={handleJoinClick}>
+                Join
+              </button>
+            )}
+            {!sessionBusy && (
+              <label
+                className="session-guests-edit"
+                title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+              >
+                <input
+                  type="checkbox"
+                  checked={guestsCanWrite}
+                  onChange={(e) => setGuestsCanWrite(e.target.checked)}
+                />
+                guests can edit
+              </label>
+            )}
+          </div>
+          {anyProcessRunning && (
+            <div className="session-group session-group-end">
+              <button className="btn-danger" onClick={handleKillProcesses}>
+                Kill Processes
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {sessionStatus === "starting" && (
+        <span className="pill pill-off">starting…</span>
+      )}
+      {isHost && anyProcessRunning && (
+        <div className="session-group">
+          {processesRunning.gateway === "Enabled" && (
+            <button
+              type="button"
+              className="pill pill-gateway"
+              onClick={() => setShowGatewayMetrics(true)}
+              title="Show PeerCode gateway health"
+            >
+              <span className="pill-dot" />
+              gateway
             </button>
           )}
-          {!sessionBusy && (
-            <label
-              className="session-guests-edit"
-              title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+          {processesRunning.tunnel === "Enabled" && (
+            <button
+              type="button"
+              className="pill pill-tunnel"
+              onClick={() => setShowTunnelMetrics(true)}
+              title="Show Cloudflare tunnel health"
             >
-              <input
-                type="checkbox"
-                checked={guestsCanWrite}
-                onChange={(e) => setGuestsCanWrite(e.target.checked)}
-              />
-              Guests can edit
-            </label>
+              <span className="pill-dot" />
+              tunnel
+            </button>
           )}
         </div>
       )}
-      {sessionNotice && (
-        <div className={`session-notice ${sessionNotice}`}>
-          {SESSION_NOTICE_MESSAGE[sessionNotice]}
+      {isHost && (publicUrl || lanUrl) && (
+        <div className="session-group">
+          {publicUrl && (
+            <button
+              className="btn"
+              onClick={() => void copyUrl("public", publicUrl)}
+            >
+              {copied === "public" ? "copied ✓" : "Copy Public URL"}
+            </button>
+          )}
+          {lanUrl && (
+            <button className="btn" onClick={() => void copyUrl("lan", lanUrl)}>
+              {copied === "lan" ? "copied ✓" : "Copy Local URL"}
+            </button>
+          )}
         </div>
       )}
       {isHost && (
-        <button
-          className="session-btn end"
-          disabled={sessionBusy}
-          onClick={handleEndSession}
-        >
-          {sessionBusy ? "Ending…" : "✕ End Session"}
-        </button>
+        <div className="session-group session-group-end">
+          <button
+            className="btn-danger"
+            disabled={sessionBusy}
+            onClick={handleEndSession}
+          >
+            {sessionBusy ? "ending…" : "End Session"}
+          </button>
+        </div>
       )}
       {sessionStatus === "guest" && (
-        <button className="session-btn end" onClick={handleLeaveSession}>
-          ✕ Leave Session
-        </button>
+        <div className="session-group session-group-end">
+          <button className="btn-danger" onClick={handleLeaveSession}>
+            Leave
+          </button>
+        </div>
       )}
       {showGatewayMetrics && isHost && (
         <MetricsPopup
@@ -315,7 +282,6 @@ export function SessionPanel({
           onCancel={() => setShowJoinModal(false)}
         />
       )}
-      {inSession && <PeersPanel roomState={roomState} isHost={isHost} />}
     </div>
   );
 }

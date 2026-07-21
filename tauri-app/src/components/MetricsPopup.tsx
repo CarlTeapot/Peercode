@@ -59,7 +59,7 @@ export function MetricsPopup({
             aria-label={`Close ${title} metrics`}
             onClick={onClose}
           >
-            x
+            ✕
           </button>
         </div>
         {unavailable ? (

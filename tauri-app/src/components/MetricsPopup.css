@@ -6,19 +6,19 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(4, 8, 14, 0.72);
-  backdrop-filter: blur(3px);
+  background: rgba(10, 10, 15, 0.78);
 }
 
 .metrics-popup {
+  position: relative;
   width: min(720px, 100%);
-  padding: 18px;
-  border: 1px solid #31516a;
-  border-radius: 10px;
-  background: #111d29;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-  color: #d8e6ef;
-  font-family: monospace;
+  padding: 22px 18px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-panel);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-1);
+  font-family: var(--font-mono);
 }
 
 .metrics-popup-heading {
@@ -29,25 +29,32 @@
 }
 
 .metrics-popup-title {
-  color: #7fc7f2;
+  position: absolute;
+  top: -0.7em;
+  left: 10px;
+  padding: 0 6px;
+  background: var(--bg-raised);
+  color: var(--accent);
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 500;
+  text-transform: lowercase;
 }
 
 .metrics-popup-subtitle {
-  margin-top: 3px;
-  color: #7f94a3;
-  font-size: 11px;
+  color: var(--text-3);
+  font-size: 12px;
 }
 
 .metrics-popup-close {
   border: 0;
   background: transparent;
-  color: #8fa5b3;
+  color: var(--text-3);
   cursor: pointer;
-  font: 700 18px/1 monospace;
+  font: 500 16px/1 var(--font-mono);
+}
+
+.metrics-popup-close:hover {
+  color: var(--red);
 }
 
 .metrics-popup-grid {
@@ -62,45 +69,44 @@
   flex-direction: column;
   gap: 4px;
   padding: 10px;
-  border: 1px solid #263d4d;
-  border-radius: 6px;
-  background: #0d1721;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
 }
 
 .metrics-popup-label {
-  color: #7f94a3;
-  font-size: 10px;
-  text-transform: uppercase;
+  color: var(--text-3);
+  font-size: 12px;
+  text-transform: lowercase;
 }
 
 .metrics-popup-ok {
-  color: #67d391;
+  color: var(--green);
 }
 
 .metrics-popup-warning {
-  color: #ff9f6e;
+  color: var(--amber);
 }
 
 .metrics-popup-loading {
   margin-top: 16px;
-  color: #7f94a3;
+  color: var(--text-3);
 }
 
 .metrics-popup-unavailable {
   margin-top: 16px;
   padding: 14px;
-  border: 1px solid #684236;
-  border-radius: 6px;
-  background: #261713;
-  color: #ff9f6e;
-  font-weight: 700;
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius);
+  background: var(--red-soft);
+  color: var(--red);
   text-align: center;
 }
 
 .metrics-popup-note {
   margin-top: 12px;
-  color: #7f94a3;
-  font-size: 11px;
+  color: var(--text-3);
+  font-size: 12px;
   line-height: 1.45;
 }
 

@@ -1,0 +1,136 @@
+.statusline {
+  display: flex;
+  align-items: stretch;
+  height: 30px;
+  flex: none;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-2);
+  user-select: none;
+  overflow: hidden;
+}
+
+.sl-role {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sl-role.host {
+  background: var(--accent);
+  color: var(--bg-app);
+}
+
+.sl-role.guest {
+  background: var(--blue);
+  color: var(--bg-app);
+}
+
+.sl-role.solo {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.sl-seg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sl-seg + .sl-seg {
+  border-left: 1px solid var(--border);
+}
+
+button.sl-seg {
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+button.sl-seg:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.sl-file {
+  color: var(--text-1);
+}
+
+.sl-dirty {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.sl-ro {
+  color: var(--amber);
+}
+
+.sl-right {
+  margin-left: auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.sl-conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.sl-conn-dot.ok {
+  background: var(--green);
+}
+
+.sl-conn-dot.warn {
+  background: var(--amber);
+}
+
+.sl-conn-dot.err {
+  background: var(--red);
+}
+
+.sl-muted {
+  color: var(--text-3);
+}
+
+.sl-zoom {
+  gap: 2px;
+}
+
+.sl-zoom-btn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+
+.sl-zoom-btn:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.sl-zoom-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-glow);
+}

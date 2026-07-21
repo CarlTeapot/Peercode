@@ -6,11 +6,24 @@ import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import { normalizeToLF, forceModelLF } from "./eol";
-import { UsernameGate } from "./usernameSetup";
+import { UsernameGate, ChangeNameModal } from "./usernameSetup";
 import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
+import { PeersPanel } from "./components/PeersPanel";
+import { StatusLine, type CursorPos } from "./components/StatusLine";
 import { useWritePermission } from "./hooks/useWritePermission";
+import { useTheme } from "./hooks/useTheme";
+import { useEditorFontSize } from "./hooks/useEditorFontSize";
+import { useSessionEvents, type SessionNotice } from "./hooks/useSessionEvents";
+import { useRoomState } from "./hooks/useRoomState";
+import type { CurrentFileInfo } from "./components/filemenu/format";
+import { monacoThemeFor, registerPeercodeThemes } from "./monacoTheme";
 import "./App.css";
+
+const SESSION_NOTICE_MESSAGE: Record<SessionNotice, string> = {
+  ended: "The host ended the session. Your document is preserved.",
+  disconnected: "Connection lost. Your document is preserved locally.",
+};
 
 interface LogEntry {
   id: number;
@@ -57,15 +70,19 @@ function installPlainTextPasteHandler(
 
 interface AppContentProps {
   username: string;
+  onUsernameChange: (name: string) => void;
 }
 
-function AppContent({ username }: AppContentProps) {
+function AppContent({ username, onUsernameChange }: AppContentProps) {
   const isDevFeaturesEnabled = import.meta.env.VITE_DEV_FEATURES === "true";
-  const [status, setStatus] = useState("loading...");
   const [statusReady, setStatusReady] = useState(false);
   const [eventLog, setEventLog] = useState<LogEntry[]>([]);
   const eventCountRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+  const { theme, toggleTheme } = useTheme();
+  const { fontSize, zoomIn, zoomOut } = useEditorFontSize();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const isApplyingRemote = useRef(false);
@@ -74,6 +91,19 @@ function AppContent({ username }: AppContentProps) {
   const opChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const [dirty, setDirty] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
+
+  const session = useSessionEvents();
+  const { roomState, clearRoomState } = useRoomState();
+  const [peersOpen, setPeersOpen] = useState(false);
+  const isHost = session.sessionStatus === "host";
+  const inSession = isHost || session.sessionStatus === "guest";
+
+  useEffect(() => {
+    if (!inSession) setPeersOpen(false);
+  }, [inSession]);
+
+  const [cursor, setCursor] = useState<CursorPos>({ line: 1, col: 1 });
+  const [fileInfo, setFileInfo] = useState<CurrentFileInfo | null>(null);
 
   const enqueueOp = useMemo(() => createEnqueueOp(opChainRef), []);
   const { sendInsert, sendDelete, sendReplace } = useMemo(
@@ -172,7 +202,9 @@ function AppContent({ username }: AppContentProps) {
     forceModelLF(editorInstance, monacoInstance);
 
     installPlainTextPasteHandler(editorInstance);
-    setStatus("editor ready");
+    editorInstance.onDidChangeCursorPosition((e) => {
+      setCursor({ line: e.position.lineNumber, col: e.position.column });
+    });
     setStatusReady(true);
     shadowTextRef.current = editorInstance.getModel()?.getValue() ?? "";
 
@@ -239,7 +271,6 @@ function AppContent({ username }: AppContentProps) {
                   payload: String(error),
                 },
               ]);
-              setStatus("ipc error");
               return;
             }
           }
@@ -253,21 +284,14 @@ function AppContent({ username }: AppContentProps) {
       <div className="toolbar">
         <span className="toolbar-brand">
           Peer<span className="toolbar-brand-accent">Code</span>
+          <span className="brand-cursor">▍</span>
         </span>
         <FileMenu
           onDocumentLoaded={handleDocumentLoaded}
           dirty={dirty}
           onSaved={() => setDirty(false)}
+          onCurrentChanged={setFileInfo}
         />
-        {username && <span className="toolbar-username">{username}</span>}
-        {!canWrite && (
-          <span
-            className="readonly-badge"
-            title="The host has made you read-only"
-          >
-            🔒 read-only
-          </span>
-        )}
         {isDevFeaturesEnabled && (
           <button
             onClick={() => void toggleLogging()}
@@ -276,47 +300,118 @@ function AppContent({ username }: AppContentProps) {
             CRDT log {loggingEnabled ? "ON" : "OFF"}
           </button>
         )}
-        <span className={`status ${statusReady ? "ready" : ""}`}>{status}</span>
+        {username && (
+          <button
+            className="toolbar-username"
+            title="Change display name"
+            onClick={() => setShowRename(true)}
+          >
+            {username}
+          </button>
+        )}
+        <button
+          className="theme-toggle"
+          title={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          onClick={toggleTheme}
+        >
+          ◐
+        </button>
       </div>
-      <SessionPanel
-        getEditorContent={getEditorContent}
-        resetDocAndEditor={resetDocAndEditor}
-      />
+      <div className="session-bar">
+        <span className="session-bar-label">session</span>
+        <SessionPanel
+          getEditorContent={getEditorContent}
+          resetDocAndEditor={resetDocAndEditor}
+          session={session}
+          clearRoomState={clearRoomState}
+        />
+      </div>
+      {showRename && (
+        <ChangeNameModal
+          current={username}
+          onDone={(name) => {
+            onUsernameChange(name);
+            setShowRename(false);
+          }}
+          onCancel={() => setShowRename(false)}
+        />
+      )}
+      {session.sessionNotice && (
+        <div className={`notice-strip ${session.sessionNotice}`}>
+          {SESSION_NOTICE_MESSAGE[session.sessionNotice]}
+        </div>
+      )}
       <div className="editor-container">
         <Editor
           height="100%"
           defaultLanguage="rust"
           defaultValue=""
-          theme="vs-dark"
+          theme={monacoThemeFor(theme)}
+          beforeMount={registerPeercodeThemes}
           onMount={handleEditorMount}
           options={{
-            fontSize: 14,
+            fontSize,
+            fontFamily:
+              '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
             automaticLayout: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
           }}
         />
       </div>
-      <div className="log-header">
-        change event log ? this is what your rust process will receive
-      </div>
-      <div className="event-log" ref={logRef}>
-        {eventLog.map((entry) => (
-          <div className="entry" key={entry.id}>
-            <span className="label">#{entry.id}</span>
-            <span className={entry.operationClass}>
-              {entry.operationLabel}
-            </span>{" "}
-            {entry.payload}
-            {entry.wireMessage && (
-              <span className="entry-wire">
-                {" "}
-                {"->"} wire: {entry.wireMessage}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+      <button
+        className="log-header"
+        onClick={() => setLogOpen((prev) => !prev)}
+        title={logOpen ? "Collapse event log" : "Expand event log"}
+      >
+        {logOpen ? "▾" : "▸"} change event log ({eventLog.length})
+      </button>
+      {logOpen && (
+        <div className="event-log" ref={logRef}>
+          {eventLog.map((entry) => (
+            <div className="entry" key={entry.id}>
+              <span className="label">#{entry.id}</span>
+              <span className={entry.operationClass}>
+                {entry.operationLabel}
+              </span>{" "}
+              {entry.payload}
+              {entry.wireMessage && (
+                <span className="entry-wire">
+                  {" "}
+                  {"->"} wire: {entry.wireMessage}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <StatusLine
+        sessionStatus={session.sessionStatus}
+        roomId={session.roomId}
+        shareUrl={session.publicUrl ?? session.lanUrl}
+        peerCount={roomState?.peers.length ?? 0}
+        inSession={inSession}
+        onPeersClick={() => setPeersOpen((prev) => !prev)}
+        fileName={fileInfo?.name ?? null}
+        dirty={dirty}
+        hadCrlf={fileInfo?.had_crlf ?? false}
+        canWrite={canWrite}
+        statusReady={statusReady}
+        cursor={cursor}
+        fontSize={fontSize}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+      />
+      {inSession && (
+        <PeersPanel
+          roomState={roomState}
+          isHost={isHost}
+          open={peersOpen}
+          onClose={() => setPeersOpen(false)}
+        />
+      )}
     </>
   );
 }
@@ -324,7 +419,9 @@ function AppContent({ username }: AppContentProps) {
 function App() {
   return (
     <UsernameGate>
-      {(username) => <AppContent username={username} />}
+      {(username, setUsername) => (
+        <AppContent username={username} onUsernameChange={setUsername} />
+      )}
     </UsernameGate>
   );
 }

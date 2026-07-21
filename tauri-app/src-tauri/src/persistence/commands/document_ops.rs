@@ -13,6 +13,7 @@ use super::{name_from_path, rebuild_if_crlf, set_current_file};
 pub struct CurrentFileInfo {
     pub name: String,
     pub path: String,
+    pub had_crlf: bool,
 }
 
 /// Duplicates the document under a new CRDT identity as an untitled buffer;
@@ -58,5 +59,6 @@ pub fn get_current_file(state: State<'_, AppState>) -> Result<Option<CurrentFile
         .map(|f| CurrentFileInfo {
             name: name_from_path(&f.path),
             path: f.path.to_string_lossy().into_owned(),
+            had_crlf: f.had_crlf,
         }))
 }
