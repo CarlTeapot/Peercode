@@ -10,6 +10,7 @@ import { UsernameGate } from "./usernameSetup";
 import { FileMenu } from "./components/filemenu/FileMenu";
 import { SessionPanel } from "./components/SessionPanel";
 import { useWritePermission } from "./hooks/useWritePermission";
+import { PEERCODE_THEME, registerPeercodeTheme } from "./monacoTheme";
 import "./App.css";
 
 interface LogEntry {
@@ -288,10 +289,13 @@ function AppContent({ username }: AppContentProps) {
           height="100%"
           defaultLanguage="rust"
           defaultValue=""
-          theme="vs-dark"
+          theme={PEERCODE_THEME}
+          beforeMount={registerPeercodeTheme}
           onMount={handleEditorMount}
           options={{
             fontSize: 14,
+            fontFamily:
+              '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
             automaticLayout: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
