@@ -216,12 +216,12 @@ export function SessionPanel({
           className="btn"
           onClick={() => void copyUrl("public", publicUrl)}
         >
-          {copied === "public" ? "copied" : "Copy Public URL"}
+          {copied === "public" ? "copied" : "Copy Public"}
         </button>
       )}
       {isHost && lanUrl && (
         <button className="btn" onClick={() => void copyUrl("lan", lanUrl)}>
-          {copied === "lan" ? "copied" : "Copy LAN URL"}
+          {copied === "lan" ? "copied" : "Copy LAN"}
         </button>
       )}
       {isHost && (

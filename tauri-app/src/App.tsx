@@ -76,6 +76,7 @@ function AppContent({ username }: AppContentProps) {
   const [eventLog, setEventLog] = useState<LogEntry[]>([]);
   const eventCountRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
+  const [logOpen, setLogOpen] = useState(false);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const isApplyingRemote = useRef(false);
@@ -324,26 +325,32 @@ function AppContent({ username }: AppContentProps) {
           }}
         />
       </div>
-      <div className="log-header">
-        change event log ? this is what your rust process will receive
-      </div>
-      <div className="event-log" ref={logRef}>
-        {eventLog.map((entry) => (
-          <div className="entry" key={entry.id}>
-            <span className="label">#{entry.id}</span>
-            <span className={entry.operationClass}>
-              {entry.operationLabel}
-            </span>{" "}
-            {entry.payload}
-            {entry.wireMessage && (
-              <span className="entry-wire">
-                {" "}
-                {"->"} wire: {entry.wireMessage}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+      <button
+        className="log-header"
+        onClick={() => setLogOpen((prev) => !prev)}
+        title={logOpen ? "Collapse event log" : "Expand event log"}
+      >
+        {logOpen ? "▾" : "▸"} change event log ({eventLog.length})
+      </button>
+      {logOpen && (
+        <div className="event-log" ref={logRef}>
+          {eventLog.map((entry) => (
+            <div className="entry" key={entry.id}>
+              <span className="label">#{entry.id}</span>
+              <span className={entry.operationClass}>
+                {entry.operationLabel}
+              </span>{" "}
+              {entry.payload}
+              {entry.wireMessage && (
+                <span className="entry-wire">
+                  {" "}
+                  {"->"} wire: {entry.wireMessage}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       <StatusLine
         sessionStatus={session.sessionStatus}
         roomId={session.roomId}

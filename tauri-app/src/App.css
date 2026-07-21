@@ -191,7 +191,8 @@ button.pill {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   padding: 7px 12px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
@@ -267,7 +268,8 @@ button.pill {
 .session-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
 }
 
 .session-guests-edit {
@@ -310,17 +312,28 @@ button.pill {
 }
 
 .log-header {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--text-3);
   padding: 4px 16px;
   background: var(--bg-panel);
+  border: none;
   border-top: 1px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 1px;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.log-header:hover {
+  color: var(--text-1);
 }
 
 .event-log {
-  height: 160px;
+  height: 96px;
   background: var(--bg-inset);
   border-top: 1px solid var(--border);
   overflow-y: auto;
