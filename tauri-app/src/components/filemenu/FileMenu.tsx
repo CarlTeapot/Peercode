@@ -2,15 +2,22 @@ import { useEffect, useRef } from "react";
 import { MenuList } from "./MenuList";
 import { RecentsList } from "./RecentsList";
 import { useFileMenu } from "./useFileMenu";
+import type { CurrentFileInfo } from "./format";
 
 interface FileMenuProps {
   onDocumentLoaded: (text: string, name: string) => void;
   dirty: boolean;
   onSaved: () => void;
+  onCurrentChanged?: (info: CurrentFileInfo | null) => void;
 }
 
-export function FileMenu({ onDocumentLoaded, dirty, onSaved }: FileMenuProps) {
-  const menu = useFileMenu(onDocumentLoaded, onSaved);
+export function FileMenu({
+  onDocumentLoaded,
+  dirty,
+  onSaved,
+  onCurrentChanged,
+}: FileMenuProps) {
+  const menu = useFileMenu(onDocumentLoaded, onSaved, onCurrentChanged);
   const menuRef = useRef<HTMLDivElement>(null);
   const { open, closeMenu } = menu;
 

@@ -8,6 +8,7 @@ export interface DocumentMeta {
 export interface CurrentFileInfo {
   name: string;
   path: string;
+  had_crlf: boolean;
 }
 
 // Open and save dialogs deliberately have NO filters: any readable file can

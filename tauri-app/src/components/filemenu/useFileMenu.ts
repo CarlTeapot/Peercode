@@ -11,6 +11,7 @@ export type FileMenuView = "menu" | "recents";
 export function useFileMenu(
   onDocumentLoaded: (text: string, name: string) => void,
   onSaved: () => void,
+  onCurrentChanged?: (info: CurrentFileInfo | null) => void,
 ) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<FileMenuView>("menu");
@@ -21,6 +22,14 @@ export function useFileMenu(
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
+  const updateCurrent = useCallback(
+    (info: CurrentFileInfo | null) => {
+      setCurrent(info);
+      onCurrentChanged?.(info);
+    },
+    [onCurrentChanged],
+  );
+
   const refreshAll = useCallback(async () => {
     const results = await Promise.allSettled([
       invoke<DocumentMeta[]>("list_recent_files"),
@@ -29,9 +38,9 @@ export function useFileMenu(
     ]);
     // Best-effort refresh: anything that failed simply keeps its last value.
     if (results[0].status === "fulfilled") setRecents(results[0].value);
-    if (results[1].status === "fulfilled") setCurrent(results[1].value);
+    if (results[1].status === "fulfilled") updateCurrent(results[1].value);
     if (results[2].status === "fulfilled") setDocsDir(results[2].value);
-  }, []);
+  }, [updateCurrent]);
 
   // Prefetch once so Ctrl+S has the docs dir for the Save-as default path
   // even if the menu was never opened.
@@ -74,8 +83,8 @@ export function useFileMenu(
   }, []);
 
   const refreshCurrent = useCallback(async () => {
-    setCurrent(await invoke<CurrentFileInfo | null>("get_current_file"));
-  }, []);
+    updateCurrent(await invoke<CurrentFileInfo | null>("get_current_file"));
+  }, [updateCurrent]);
 
   const saveCurrent = useCallback(async () => {
     await runAction(async () => {
@@ -98,13 +107,13 @@ export function useFileMenu(
   const saveShortcut = useCallback(async () => {
     await runAction(async () => {
       const info = await invoke<CurrentFileInfo | null>("get_current_file");
-      setCurrent(info);
+      updateCurrent(info);
       if (!(await saveBuffer(info, docsDir))) return;
       await refreshCurrent();
       onSaved();
       closeMenu();
     });
-  }, [docsDir, runAction, refreshCurrent, onSaved, closeMenu]);
+  }, [docsDir, runAction, refreshCurrent, onSaved, closeMenu, updateCurrent]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -123,12 +132,12 @@ export function useFileMenu(
       await runAction(async () => {
         const text = await invoke<string>("open_file", { path });
         const info = await invoke<CurrentFileInfo | null>("get_current_file");
-        setCurrent(info);
+        updateCurrent(info);
         onDocumentLoaded(text, info?.name ?? "untitled");
         closeMenu();
       });
     },
-    [runAction, onDocumentLoaded, closeMenu],
+    [runAction, onDocumentLoaded, closeMenu, updateCurrent],
   );
 
   const openFrom = useCallback(async () => {
@@ -167,11 +176,11 @@ export function useFileMenu(
   const fork = useCallback(async () => {
     await runAction(async () => {
       const text = await invoke<string>("fork_document");
-      setCurrent(null);
+      updateCurrent(null);
       onDocumentLoaded(text, "untitled");
       closeMenu();
     });
-  }, [runAction, onDocumentLoaded, closeMenu]);
+  }, [runAction, onDocumentLoaded, closeMenu, updateCurrent]);
 
   return {
     open,
