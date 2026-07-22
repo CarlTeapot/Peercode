@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "PeerCode",
+        "title": "Peared",
         "width": 1280,
         "height": 800
       }

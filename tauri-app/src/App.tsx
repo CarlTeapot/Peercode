@@ -6,10 +6,15 @@ import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import { normalizeToLF, forceModelLF } from "./eol";
-import { UsernameGate, ChangeNameModal } from "./usernameSetup";
-import { FileMenu } from "./components/filemenu/FileMenu";
-import { SessionPanel } from "./components/SessionPanel";
+import { UsernameGate } from "./usernameSetup";
+import { useFileMenu } from "./components/filemenu/useFileMenu";
+import { SideRail, type PanelSection } from "./components/siderail/SideRail";
+import { SidePanel } from "./components/sidepanel/SidePanel";
 import { PeersPanel } from "./components/PeersPanel";
+import { PeerAvatars } from "./components/PeerAvatars";
+import { InvitePopover } from "./components/InvitePopover";
+import { KebabMenu, type KebabItem } from "./components/KebabMenu";
+import { PearLogo } from "./components/PearLogo";
 import { StatusLine, type CursorPos } from "./components/StatusLine";
 import { useWritePermission } from "./hooks/useWritePermission";
 import { useTheme } from "./hooks/useTheme";
@@ -80,7 +85,6 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
   const eventCountRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const [logOpen, setLogOpen] = useState(false);
-  const [showRename, setShowRename] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { fontSize, zoomIn, zoomOut } = useEditorFontSize();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -101,6 +105,21 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
   useEffect(() => {
     if (!inSession) setPeersOpen(false);
   }, [inSession]);
+
+  const [activeSection, setActiveSection] = useState<PanelSection | null>(null);
+  const lastSectionRef = useRef<PanelSection>("collab");
+
+  const selectSection = useCallback((s: PanelSection) => {
+    setActiveSection((prev) => {
+      const next = prev === s ? null : s;
+      if (next) lastSectionRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const togglePanel = useCallback(() => {
+    setActiveSection((prev) => (prev ? null : lastSectionRef.current));
+  }, []);
 
   const [cursor, setCursor] = useState<CursorPos>({ line: 1, col: 1 });
   const [fileInfo, setFileInfo] = useState<CurrentFileInfo | null>(null);
@@ -148,6 +167,9 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
     },
     [replaceEditorText],
   );
+
+  const onSaved = useCallback(() => setDirty(false), []);
+  const fileMenu = useFileMenu(handleDocumentLoaded, onSaved, setFileInfo);
 
   const getEditorContent = useCallback(
     () => editorRef.current?.getValue() ?? "",
@@ -279,131 +301,160 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
     );
   };
 
+  const anyProcessRunning =
+    session.processesRunning.gateway === "Enabled" ||
+    session.processesRunning.tunnel === "Enabled";
+
+  const kebabItems: KebabItem[] = [
+    {
+      label: logOpen ? "Hide event log" : "Show event log",
+      onClick: () => setLogOpen((prev) => !prev),
+    },
+  ];
+  if (isDevFeaturesEnabled) {
+    kebabItems.push({
+      label: loggingEnabled ? "CRDT log: on" : "CRDT log: off",
+      active: loggingEnabled,
+      onClick: () => void toggleLogging(),
+    });
+  }
+  if (session.sessionStatus === "idle" && anyProcessRunning) {
+    kebabItems.push({
+      label: "Kill Processes",
+      tone: "danger",
+      onClick: () =>
+        void invoke("kill_host_processes").then(() =>
+          session.setProcessesRunning({
+            gateway: "Disabled",
+            tunnel: "Disabled",
+          }),
+        ),
+    });
+  }
+
   return (
-    <>
-      <div className="toolbar">
-        <span className="toolbar-brand">
-          Peer<span className="toolbar-brand-accent">Code</span>
-          <span className="brand-cursor">▍</span>
-        </span>
-        <FileMenu
-          onDocumentLoaded={handleDocumentLoaded}
-          dirty={dirty}
-          onSaved={() => setDirty(false)}
-          onCurrentChanged={setFileInfo}
-        />
-        {isDevFeaturesEnabled && (
-          <button
-            onClick={() => void toggleLogging()}
-            className={"crdt-log-btn" + (loggingEnabled ? " on" : "")}
-          >
-            CRDT log {loggingEnabled ? "ON" : "OFF"}
-          </button>
-        )}
-        {username && (
-          <button
-            className="toolbar-username"
-            title="Change display name"
-            onClick={() => setShowRename(true)}
-          >
-            {username}
-          </button>
-        )}
-        <button
-          className="theme-toggle"
-          title={
-            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-          }
-          onClick={toggleTheme}
-        >
-          ◐
-        </button>
-      </div>
-      <div className="session-bar">
-        <span className="session-bar-label">session</span>
-        <SessionPanel
-          getEditorContent={getEditorContent}
-          resetDocAndEditor={resetDocAndEditor}
-          session={session}
-          clearRoomState={clearRoomState}
-        />
-      </div>
-      {showRename && (
-        <ChangeNameModal
-          current={username}
-          onDone={(name) => {
-            onUsernameChange(name);
-            setShowRename(false);
-          }}
-          onCancel={() => setShowRename(false)}
-        />
-      )}
-      {session.sessionNotice && (
-        <div className={`notice-strip ${session.sessionNotice}`}>
-          {SESSION_NOTICE_MESSAGE[session.sessionNotice]}
-        </div>
-      )}
-      <div className="editor-container">
-        <Editor
-          height="100%"
-          defaultLanguage="rust"
-          defaultValue=""
-          theme={monacoThemeFor(theme)}
-          beforeMount={registerPeercodeThemes}
-          onMount={handleEditorMount}
-          options={{
-            fontSize,
-            fontFamily:
-              '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
-            automaticLayout: true,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-          }}
-        />
-      </div>
-      <button
-        className="log-header"
-        onClick={() => setLogOpen((prev) => !prev)}
-        title={logOpen ? "Collapse event log" : "Expand event log"}
-      >
-        {logOpen ? "▾" : "▸"} change event log ({eventLog.length})
-      </button>
-      {logOpen && (
-        <div className="event-log" ref={logRef}>
-          {eventLog.map((entry) => (
-            <div className="entry" key={entry.id}>
-              <span className="label">#{entry.id}</span>
-              <span className={entry.operationClass}>
-                {entry.operationLabel}
-              </span>{" "}
-              {entry.payload}
-              {entry.wireMessage && (
-                <span className="entry-wire">
-                  {" "}
-                  {"->"} wire: {entry.wireMessage}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      <StatusLine
-        sessionStatus={session.sessionStatus}
-        roomId={session.roomId}
-        shareUrl={session.publicUrl ?? session.lanUrl}
-        peerCount={roomState?.peers.length ?? 0}
-        inSession={inSession}
-        onPeersClick={() => setPeersOpen((prev) => !prev)}
-        fileName={fileInfo?.name ?? null}
-        dirty={dirty}
-        hadCrlf={fileInfo?.had_crlf ?? false}
-        canWrite={canWrite}
-        statusReady={statusReady}
-        cursor={cursor}
-        fontSize={fontSize}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
+    <div className="app-shell">
+      <SideRail
+        sections={["collab", "files", "you"]}
+        active={activeSection}
+        onSelect={selectSection}
+        panelOpen={activeSection !== null}
+        onTogglePanel={togglePanel}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
+      <div className="app-main">
+        <div className="topbar">
+          <span className="toolbar-brand">
+            <PearLogo size={22} className="toolbar-brand-logo" />
+            <span className="toolbar-brand-text">
+              <span className="toolbar-brand-accent">Pear</span>ed
+              <span className="brand-cursor">▍</span>
+            </span>
+          </span>
+          <span className="topbar-file" title={fileInfo?.path ?? undefined}>
+            {fileInfo?.name ?? "untitled"}
+            {dirty && <span className="file-menu-dirty">●</span>}
+          </span>
+          <div className="topbar-right">
+            {inSession && roomState && (
+              <PeerAvatars
+                roomState={roomState}
+                onClick={() => setPeersOpen((prev) => !prev)}
+              />
+            )}
+            {isHost && (
+              <InvitePopover
+                publicUrl={session.publicUrl}
+                lanUrl={session.lanUrl}
+              />
+            )}
+            <KebabMenu items={kebabItems} />
+          </div>
+        </div>
+        {session.sessionNotice && (
+          <div className={`notice-strip ${session.sessionNotice}`}>
+            {SESSION_NOTICE_MESSAGE[session.sessionNotice]}
+          </div>
+        )}
+        <div className="app-body">
+          {activeSection && (
+            <SidePanel
+              section={activeSection}
+              collab={{
+                getEditorContent,
+                resetDocAndEditor,
+                session,
+                clearRoomState,
+              }}
+              files={{ menu: fileMenu }}
+              you={{ username, onUsernameChange }}
+            />
+          )}
+          <div className="editor-col">
+            <div className="editor-container">
+              <Editor
+                height="100%"
+                defaultLanguage="rust"
+                defaultValue=""
+                theme={monacoThemeFor(theme)}
+                beforeMount={registerPeercodeThemes}
+                onMount={handleEditorMount}
+                options={{
+                  fontSize,
+                  fontFamily:
+                    '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
+                  automaticLayout: true,
+                  lineNumbersMinChars: 3,
+                  lineDecorationsWidth: 6,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        <button
+          className="log-header"
+          onClick={() => setLogOpen((prev) => !prev)}
+          title={logOpen ? "Collapse event log" : "Expand event log"}
+        >
+          {logOpen ? "▾" : "▸"} change event log ({eventLog.length})
+        </button>
+        {logOpen && (
+          <div className="event-log" ref={logRef}>
+            {eventLog.map((entry) => (
+              <div className="entry" key={entry.id}>
+                <span className="label">#{entry.id}</span>
+                <span className={entry.operationClass}>
+                  {entry.operationLabel}
+                </span>{" "}
+                {entry.payload}
+                {entry.wireMessage && (
+                  <span className="entry-wire">
+                    {" "}
+                    {"->"} wire: {entry.wireMessage}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <StatusLine
+          sessionStatus={session.sessionStatus}
+          roomId={session.roomId}
+          shareUrl={session.publicUrl ?? session.lanUrl}
+          fileName={fileInfo?.name ?? null}
+          dirty={dirty}
+          hadCrlf={fileInfo?.had_crlf ?? false}
+          canWrite={canWrite}
+          statusReady={statusReady}
+          cursor={cursor}
+          fontSize={fontSize}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+        />
+      </div>
       {inSession && (
         <PeersPanel
           roomState={roomState}
@@ -412,7 +463,7 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
           onClose={() => setPeersOpen(false)}
         />
       )}
-    </>
+    </div>
   );
 }
 
