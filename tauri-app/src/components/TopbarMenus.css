@@ -1,0 +1,85 @@
+/* ── Topbar anchored menus (invite popover, kebab) ─────── */
+
+.topbar-menu-wrap {
+  position: relative;
+}
+
+.topbar-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 190px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-pop);
+  padding: 6px;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topbar-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-1);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.topbar-menu-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.topbar-menu-item:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.topbar-menu-item.danger {
+  color: var(--red);
+}
+
+.topbar-menu-item.danger:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+.topbar-menu-item.active {
+  color: var(--green);
+}
+
+.topbar-menu-item:focus-visible,
+.kebab-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow);
+}
+
+.kebab-btn {
+  width: 30px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.kebab-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
