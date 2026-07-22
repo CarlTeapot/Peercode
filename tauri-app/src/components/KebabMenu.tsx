@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components -- shared useDismiss
+   hook is exported alongside the component (same pattern as usernameSetup) */
 import { useEffect, useRef, useState, type RefObject } from "react";
 import "./TopbarMenus.css";
 
