@@ -17,7 +17,7 @@ const SECTION_TITLES: Record<PanelSection, string> = {
 interface SidePanelProps {
   section: PanelSection;
   collab: CollaborateSectionProps;
-  files: { menu: FileMenuApi };
+  files: { menu: FileMenuApi; locked: boolean };
   you: { username: string; onUsernameChange: (name: string) => void };
 }
 
@@ -27,7 +27,9 @@ export function SidePanel({ section, collab, files, you }: SidePanelProps) {
     <aside className="side-panel" aria-label={SECTION_TITLES[section]}>
       <div className="side-panel-title">{SECTION_TITLES[section]}</div>
       {section === "collab" && <CollaborateSection {...collab} />}
-      {section === "files" && <FilesSection menu={files.menu} />}
+      {section === "files" && (
+        <FilesSection menu={files.menu} locked={files.locked} />
+      )}
       {section === "you" && (
         <YouSection
           username={you.username}

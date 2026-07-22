@@ -6,6 +6,7 @@ import { useRemoteChangeListener } from "./remoteChangeListener";
 import { useSnapshotListener } from "./snapshotListener";
 import { createEnqueueOp, createIpcSenders } from "./opQueue";
 import { normalizeToLF, forceModelLF } from "./eol";
+import { computeInverseEdits, type ModelChange } from "./lib/inverseEdits";
 import { UsernameGate } from "./usernameSetup";
 import { useFileMenu } from "./components/filemenu/useFileMenu";
 import { SideRail, type PanelSection } from "./components/siderail/SideRail";
@@ -238,6 +239,11 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
         if (!model) return;
 
         // Capture the user's changes relative to the shadow text (pre-edit state)
+        const rawChanges: ModelChange[] = event.changes.map((c) => ({
+          rangeOffset: c.rangeOffset,
+          rangeLength: c.rangeLength,
+          text: c.text,
+        }));
         const changes = event.changes.map((c) => ({
           offset: c.rangeOffset,
           deleteLen: c.rangeLength,
@@ -245,21 +251,40 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
         }));
 
         // Revert Monaco to the shadow text — the backend will emit events
-        // that apply the confirmed edit back to Monaco.
+        // that apply the confirmed edit back to Monaco. The revert is
+        // surgical (exact inverse of the reported changes): a full-range
+        // replace would retokenize the whole file and bounce the caret to
+        // the end of the document for a frame.
         isApplyingRemote.current = true;
-        const fullRange = model.getFullModelRange();
-        editorInstance.executeEdits("revert", [
-          {
-            range: new monacoInstance.Range(
-              fullRange.startLineNumber,
-              fullRange.startColumn,
-              fullRange.endLineNumber,
-              fullRange.endColumn,
+        editorInstance.executeEdits(
+          "revert",
+          computeInverseEdits(shadowTextRef.current, rawChanges).map((e) => ({
+            range: monacoInstance.Range.fromPositions(
+              model.getPositionAt(e.start),
+              model.getPositionAt(e.end),
             ),
-            text: shadowTextRef.current,
+            text: e.text,
             forceMoveMarkers: false,
-          },
-        ]);
+          })),
+        );
+        // DEV compares full text; release keeps an O(1) length invariant so a
+        // wrong revert never silently diverges the model from the shadow.
+        const revertDiverged = import.meta.env.DEV
+          ? model.getValue() !== shadowTextRef.current
+          : model.getValueLength() !== shadowTextRef.current.length;
+        if (revertDiverged) {
+          console.warn(
+            "surgical revert diverged from shadow text; falling back to full revert",
+          );
+          const fullRange = model.getFullModelRange();
+          editorInstance.executeEdits("revert", [
+            {
+              range: fullRange,
+              text: shadowTextRef.current,
+              forceMoveMarkers: false,
+            },
+          ]);
+        }
         const primaryChange = changes[0];
         if (primaryChange) {
           editorInstance.setPosition(model.getPositionAt(primaryChange.offset));
@@ -387,7 +412,10 @@ function AppContent({ username, onUsernameChange }: AppContentProps) {
                 session,
                 clearRoomState,
               }}
-              files={{ menu: fileMenu }}
+              files={{
+                menu: fileMenu,
+                locked: session.sessionStatus === "guest",
+              }}
               you={{ username, onUsernameChange }}
             />
           )}

@@ -18,10 +18,11 @@ import {
 
 interface FilesSectionProps {
   menu: FileMenuApi;
+  locked: boolean;
 }
 
 /** Files section of the side panel: save/open actions + recent files. */
-export function FilesSection({ menu }: FilesSectionProps) {
+export function FilesSection({ menu, locked }: FilesSectionProps) {
   const { refreshAll } = menu;
 
   // Re-list recents (pruning dead paths) every time the section opens.
@@ -47,15 +48,20 @@ export function FilesSection({ menu }: FilesSectionProps) {
       <FileAction
         icon={IconFolderOpen}
         label="Open from…"
-        disabled={menu.busy}
+        disabled={menu.busy || locked}
         onClick={() => void menu.openFrom()}
       />
       <FileAction
         icon={IconFork}
         label="Fork"
-        disabled={menu.busy}
+        disabled={menu.busy || locked}
         onClick={() => void menu.fork()}
       />
+      {locked && (
+        <p className="panel-hint">
+          In a session — leave it to open a different file.
+        </p>
+      )}
       <div className="file-dropdown-separator files-separator" />
       <div className="file-dropdown-section">recent files</div>
       {menu.recents.length === 0 ? (
@@ -65,7 +71,7 @@ export function FilesSection({ menu }: FilesSectionProps) {
       ) : (
         <div className="file-dropdown-list files-recents">
           {menu.recents.map((d) => (
-            <RecentRow key={d.path} doc={d} menu={menu} />
+            <RecentRow key={d.path} doc={d} menu={menu} locked={locked} />
           ))}
         </div>
       )}
@@ -102,13 +108,21 @@ function FileAction({
   );
 }
 
-function RecentRow({ doc, menu }: { doc: DocumentMeta; menu: FileMenuApi }) {
+function RecentRow({
+  doc,
+  menu,
+  locked,
+}: {
+  doc: DocumentMeta;
+  menu: FileMenuApi;
+  locked: boolean;
+}) {
   return (
     <div className="file-dropdown-doc">
       <button
         className="file-dropdown-doc-name"
         onClick={() => void menu.openPath(doc.path)}
-        disabled={menu.busy}
+        disabled={menu.busy || locked}
       >
         <span>{doc.name}</span>
         <span className="file-dropdown-doc-meta">
