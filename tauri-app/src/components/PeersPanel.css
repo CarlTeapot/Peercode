@@ -3,7 +3,7 @@
 .peers-panel.tui-box {
   position: fixed;
   right: 16px;
-  bottom: 46px;
+  top: 52px;
   z-index: 901;
   width: 320px;
   max-height: 360px;

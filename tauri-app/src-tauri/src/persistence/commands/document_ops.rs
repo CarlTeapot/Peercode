@@ -7,7 +7,7 @@ use tauri::State;
 use crate::state::appstate::AppState;
 use crate::state::document::{request, DocOp};
 
-use super::{name_from_path, rebuild_if_crlf, set_current_file};
+use super::{deny_doc_swap, name_from_path, rebuild_if_crlf, set_current_file};
 
 #[derive(Serialize)]
 pub struct CurrentFileInfo {
@@ -20,6 +20,7 @@ pub struct CurrentFileInfo {
 /// the first Save asks where to put it.
 #[tauri::command]
 pub async fn fork_document(state: State<'_, AppState>) -> Result<String, String> {
+    deny_doc_swap(&state.current_role(), "fork the document", false)?;
     let mut snapshot = request(&state.doc_tx, |reply| DocOp::GetSnapshot { reply }).await?;
     snapshot.client_id = ClientId::new(random::<u64>());
     snapshot.pending_blocks.clear();
@@ -38,6 +39,7 @@ pub async fn fork_document(state: State<'_, AppState>) -> Result<String, String>
 
 #[tauri::command]
 pub async fn reset_document(state: State<'_, AppState>) -> Result<(), String> {
+    deny_doc_swap(&state.current_role(), "reset the document", false)?;
     let client_id = request(&state.doc_tx, |reply| DocOp::GetClientId { reply }).await?;
     let fresh = Document::new(client_id);
     request(&state.doc_tx, |reply| DocOp::DocumentReplace {

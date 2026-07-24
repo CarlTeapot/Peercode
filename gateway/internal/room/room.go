@@ -184,9 +184,15 @@ func (r *Room) Run() {
 func (r *Room) dispatch(msg BroadcastMsg) {
 	switch {
 	case wire.IsSnapshotFrame(msg.Data):
-		if !r.deliverSnapshotResponse(msg.Sender, msg.Data) {
-			slog.Debug("snapshot frame dropped: no pending snapshot request", "room_id", r.ID, "client_id", msg.Sender.ID, "bytes", len(msg.Data))
+		if r.deliverSnapshotResponse(msg.Sender, msg.Data) {
+			return
 		}
+		if msg.Sender.IsHost() {
+			slog.Info("host snapshot broadcast to room", "room_id", r.ID, "bytes", len(msg.Data))
+			r.broadcast(msg)
+			return
+		}
+		slog.Warn("snapshot frame dropped: not from host", "room_id", r.ID, "client_id", msg.Sender.ID, "bytes", len(msg.Data))
 	case wire.IsPermissionFrame(msg.Data):
 		r.handlePermissionChange(msg)
 	default:

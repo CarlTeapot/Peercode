@@ -1,14 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { useSessionEvents } from "../hooks/useSessionEvents";
-import { useMetrics } from "../hooks/useMetrics";
-import { MetricsPopup } from "./MetricsPopup";
-import { SaveBeforeSessionModal } from "./SaveBeforeSessionModal";
-import { JoinModal } from "./JoinModal";
+import type { useSessionEvents } from "../../hooks/useSessionEvents";
+import { useMetrics } from "../../hooks/useMetrics";
+import { MetricsPopup } from "../MetricsPopup";
+import { SaveBeforeSessionModal } from "../SaveBeforeSessionModal";
+import { JoinModal } from "../JoinModal";
 
 export type SessionState = ReturnType<typeof useSessionEvents>;
 
-interface SessionPanelProps {
+export interface CollaborateSectionProps {
   /** Current editor text; used to warn before joining discards it. */
   getEditorContent: () => string;
   /** Clear the CRDT document and the editor (before joining a session). */
@@ -19,16 +19,15 @@ interface SessionPanelProps {
 }
 
 /**
- * Session controls cluster rendered inside the toolbar: host/join/end/leave
- * buttons, sidecar health pills, copy-URL actions and the related modals.
- * Status readouts live in the StatusLine; transient notices in App.
+ * Collaborate section of the side panel: host/join/end/leave, sidecar
+ * health pills, copy-URL actions and the related modals.
  */
-export function SessionPanel({
+export function CollaborateSection({
   getEditorContent,
   resetDocAndEditor,
   session,
   clearRoomState,
-}: SessionPanelProps) {
+}: CollaborateSectionProps) {
   const {
     sessionStatus,
     setSessionStatus,
@@ -36,7 +35,6 @@ export function SessionPanel({
     publicUrl,
     setPublicUrl,
     processesRunning,
-    setProcessesRunning,
     sessionBusy,
     setSessionBusy,
     applyIdleSessionState,
@@ -136,21 +134,18 @@ export function SessionPanel({
     });
   }, [applyIdleSessionState, clearRoomState]);
 
-  const handleKillProcesses = useCallback(() => {
-    void invoke("kill_host_processes").then(() =>
-      setProcessesRunning({ gateway: "Disabled", tunnel: "Disabled" }),
-    );
-  }, [setProcessesRunning]);
-
   const anyProcessRunning =
     processesRunning.gateway === "Enabled" ||
     processesRunning.tunnel === "Enabled";
 
   return (
-    <div className="session-controls">
+    <div className="panel-section">
       {sessionStatus === "idle" && (
         <>
-          <div className="session-group">
+          <p className="panel-hint">
+            Host a session for others to join, or join someone else&apos;s.
+          </p>
+          <div className="panel-actions">
             <button
               className="btn-primary"
               onClick={() => void handleHost()}
@@ -163,88 +158,90 @@ export function SessionPanel({
                 Join
               </button>
             )}
-            {!sessionBusy && (
-              <label
-                className="session-guests-edit"
-                title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
-              >
-                <input
-                  type="checkbox"
-                  checked={guestsCanWrite}
-                  onChange={(e) => setGuestsCanWrite(e.target.checked)}
-                />
-                guests can edit
-              </label>
-            )}
           </div>
-          {anyProcessRunning && (
-            <div className="session-group session-group-end">
-              <button className="btn-danger" onClick={handleKillProcesses}>
-                Kill Processes
-              </button>
-            </div>
+          {!sessionBusy && (
+            <label
+              className="session-guests-edit"
+              title="Whether joining guests may edit right away. You can change each guest's access later from the peers panel."
+            >
+              <input
+                type="checkbox"
+                checked={guestsCanWrite}
+                onChange={(e) => setGuestsCanWrite(e.target.checked)}
+              />
+              guests can edit
+            </label>
           )}
         </>
       )}
       {sessionStatus === "starting" && (
         <span className="pill pill-off">starting…</span>
       )}
-      {isHost && anyProcessRunning && (
-        <div className="session-group">
-          {processesRunning.gateway === "Enabled" && (
-            <button
-              type="button"
-              className="pill pill-gateway"
-              onClick={() => setShowGatewayMetrics(true)}
-              title="Show PeerCode gateway health"
-            >
-              <span className="pill-dot" />
-              gateway
-            </button>
-          )}
-          {processesRunning.tunnel === "Enabled" && (
-            <button
-              type="button"
-              className="pill pill-tunnel"
-              onClick={() => setShowTunnelMetrics(true)}
-              title="Show Cloudflare tunnel health"
-            >
-              <span className="pill-dot" />
-              tunnel
-            </button>
-          )}
-        </div>
-      )}
-      {isHost && (publicUrl || lanUrl) && (
-        <div className="session-group">
-          {publicUrl && (
-            <button
-              className="btn"
-              onClick={() => void copyUrl("public", publicUrl)}
-            >
-              {copied === "public" ? "copied ✓" : "Copy Public URL"}
-            </button>
-          )}
-          {lanUrl && (
-            <button className="btn" onClick={() => void copyUrl("lan", lanUrl)}>
-              {copied === "lan" ? "copied ✓" : "Copy Local URL"}
-            </button>
-          )}
-        </div>
-      )}
       {isHost && (
-        <div className="session-group session-group-end">
-          <button
-            className="btn-danger"
-            disabled={sessionBusy}
-            onClick={handleEndSession}
-          >
-            {sessionBusy ? "ending…" : "End Session"}
-          </button>
-        </div>
+        <>
+          {anyProcessRunning && (
+            <div className="panel-actions">
+              {processesRunning.gateway === "Enabled" && (
+                <button
+                  type="button"
+                  className="pill pill-gateway"
+                  onClick={() => setShowGatewayMetrics(true)}
+                  title="Show Peared gateway health"
+                >
+                  <span className="pill-dot" />
+                  gateway
+                </button>
+              )}
+              {processesRunning.tunnel === "Enabled" && (
+                <button
+                  type="button"
+                  className="pill pill-tunnel"
+                  onClick={() => setShowTunnelMetrics(true)}
+                  title="Show Cloudflare tunnel health"
+                >
+                  <span className="pill-dot" />
+                  tunnel
+                </button>
+              )}
+            </div>
+          )}
+          <p className="panel-hint">
+            Public URL is shared over the internet via a cloud tunnel.
+          </p>
+          <p className="panel-hint">
+            Local URL is a direct connection over the LAN.
+          </p>
+          <div className="panel-stack">
+            {publicUrl && (
+              <button
+                className="btn"
+                onClick={() => void copyUrl("public", publicUrl)}
+              >
+                {copied === "public" ? "copied ✓" : "Copy Public URL"}
+              </button>
+            )}
+            {lanUrl && (
+              <button
+                className="btn"
+                onClick={() => void copyUrl("lan", lanUrl)}
+              >
+                {copied === "lan" ? "copied ✓" : "Copy Local URL"}
+              </button>
+            )}
+          </div>
+          <div className="panel-footer">
+            <button
+              className="btn-danger"
+              disabled={sessionBusy}
+              onClick={handleEndSession}
+            >
+              {sessionBusy ? "ending…" : "End Session"}
+            </button>
+          </div>
+        </>
       )}
       {sessionStatus === "guest" && (
-        <div className="session-group session-group-end">
+        <div className="panel-footer">
           <button className="btn-danger" onClick={handleLeaveSession}>
             Leave
           </button>
@@ -252,7 +249,7 @@ export function SessionPanel({
       )}
       {showGatewayMetrics && isHost && (
         <MetricsPopup
-          title="PeerCode gateway"
+          title="Peared gateway"
           subtitle="Live relay and room health"
           unavailable={gatewayUnavailable}
           fields={gatewayFields}
@@ -265,7 +262,7 @@ export function SessionPanel({
           subtitle="Live host connection health"
           unavailable={tunnelUnavailable}
           fields={tunnelFields}
-          note="Global peer count is not exposed by cloudflared. It must come from the PeerCode gateway, not tunnel metrics."
+          note="Global peer count is not exposed by cloudflared. It must come from the Peared gateway, not tunnel metrics."
           onClose={() => setShowTunnelMetrics(false)}
         />
       )}

@@ -5,6 +5,7 @@ mod save;
 #[cfg(test)]
 mod tests;
 
+use crate::state::app_role::AppRole;
 use crate::state::appstate::{AppState, CurrentFile};
 use crdt_core::Document;
 
@@ -36,4 +37,12 @@ fn rebuild_if_crlf(doc: Document) -> Result<(Document, String), String> {
             .map_err(|e| format!("failed to normalize legacy document: {e}"))?;
     }
     Ok((fresh, normalized))
+}
+
+pub(super) fn deny_doc_swap(role: &AppRole, verb: &str, allow_host: bool) -> Result<(), String> {
+    match role {
+        AppRole::Guest { .. } => Err(format!("leave the session before you {verb}")),
+        AppRole::Host { .. } if !allow_host => Err(format!("end the session before you {verb}")),
+        _ => Ok(()),
+    }
 }

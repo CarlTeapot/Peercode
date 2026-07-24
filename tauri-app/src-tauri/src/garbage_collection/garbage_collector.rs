@@ -24,6 +24,7 @@ pub enum GcEvent {
     PeerSvReport { client: ClientId, sv: StateVector },
     Joined(ClientId),
     Left(ClientId),
+    DocumentReplaced,
 }
 
 pub struct GcCoordinator {
@@ -128,6 +129,11 @@ fn apply_event(peer_svs: &mut HashMap<ClientId, StateVector>, event: GcEvent) {
         }
         GcEvent::Left(client) => {
             peer_svs.remove(&client);
+        }
+        GcEvent::DocumentReplaced => {
+            for sv in peer_svs.values_mut() {
+                *sv = StateVector::new();
+            }
         }
     }
 }

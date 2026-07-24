@@ -102,3 +102,20 @@ fn min_sv_equals_own_when_no_peers() {
     assert_eq!(min.get(&ClientId::new(1)), 4);
     assert_eq!(min.get(&ClientId::new(2)), 7);
 }
+
+#[test]
+fn document_replaced_clears_reported_svs_but_keeps_membership() {
+    let mut peers: HashMap<ClientId, StateVector> = HashMap::new();
+    let peer = ClientId::new(7);
+
+    apply_event(&mut peers, GcEvent::Joined(peer));
+    let mut sv = StateVector::new();
+    sv.update(ClientId::new(1), 42);
+    apply_event(&mut peers, GcEvent::PeerSvReport { client: peer, sv });
+
+    apply_event(&mut peers, GcEvent::DocumentReplaced);
+
+    assert!(peers.contains_key(&peer));
+
+    assert_eq!(peers.get(&peer).unwrap().get(&ClientId::new(1)), 0);
+}

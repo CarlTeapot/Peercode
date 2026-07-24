@@ -94,6 +94,10 @@ impl SyncMaintenance {
             .await;
     }
 
+    pub async fn document_replaced(&self) {
+        self.send_gc_event(GcEvent::DocumentReplaced).await;
+    }
+
     async fn send_gc_event(&self, event: GcEvent) {
         let tx = self
             .inner

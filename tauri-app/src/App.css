@@ -104,6 +104,34 @@ body {
   height: 100vh;
 }
 
+/* ── App shell: rail | (panel | main) ──────────────────── */
+
+.app-shell {
+  display: flex;
+  height: 100vh;
+  min-height: 0;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.editor-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* ── Shared primitives ─────────────────────────────────── */
 
 .btn,
@@ -172,12 +200,9 @@ body {
 .btn-danger:focus-visible,
 button.pill:focus-visible,
 .sl-seg:focus-visible,
-.file-menu-btn:focus-visible,
 .file-dropdown-item:focus-visible,
-.file-dropdown-btn:focus-visible,
 .file-dropdown-doc-name:focus-visible,
 .file-dropdown-doc-action:focus-visible,
-.crdt-log-btn:focus-visible,
 .log-header:focus-visible,
 .modal-btn:focus-visible,
 .perm-toggle:focus-visible,
@@ -265,24 +290,32 @@ button.pill {
 
 /* ── Toolbar ───────────────────────────────────────────── */
 
-.toolbar {
+.topbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 8px 14px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   font-size: 13.5px;
   color: var(--text-2);
+  flex: none;
 }
 
 .toolbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
   user-select: none;
   margin-right: 4px;
+}
+
+.toolbar-brand-logo {
+  flex: none;
+  display: block;
 }
 
 .toolbar-brand-accent {
@@ -300,117 +333,26 @@ button.pill {
   }
 }
 
-.toolbar-username {
-  margin-left: auto;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  padding: 3px 10px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    color 0.12s,
-    border-color 0.12s;
-}
-
-.toolbar-username:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.theme-toggle {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-2);
-  width: 28px;
-  height: 26px;
-  cursor: pointer;
-  border-radius: var(--radius);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1;
-  transition:
-    color 0.12s,
-    border-color 0.12s;
-}
-
-.theme-toggle:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.theme-toggle:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--focus-glow);
-}
-
-.crdt-log-btn {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-2);
-  padding: 2px 8px;
-  cursor: pointer;
-  border-radius: var(--radius);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.crdt-log-btn.on {
-  background: var(--green-soft);
-  border-color: var(--green);
-  color: var(--green);
-}
-
-/* Dedicated session strip under the toolbar */
-.session-bar {
-  display: flex;
+.topbar-file {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-}
-
-.session-bar-label {
-  color: var(--text-3);
-  font-size: 12.5px;
-  text-transform: lowercase;
-  letter-spacing: 0.08em;
-  user-select: none;
-}
-
-.session-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.session-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-}
-
-.session-group + .session-group {
-  border-left: 1px solid var(--border);
+  gap: 7px;
   margin-left: 6px;
   padding-left: 14px;
+  border-left: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13.5px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.session-group-end {
+.topbar-right {
   margin-left: auto;
-}
-
-.session-group-end.session-group {
-  border-left: none;
-  padding-left: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .session-guests-edit {
@@ -510,63 +452,10 @@ button.pill {
 
 /* ── File menu ─────────────────────────────────────────── */
 
-.file-menu {
-  position: relative;
-}
-
-.file-menu-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text-2);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 13.5px;
-  padding: 5px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition:
-    background 0.12s,
-    color 0.12s;
-}
-
-.file-menu-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-1);
-}
-
-.file-menu-current {
-  color: var(--accent);
-  font-size: 12.5px;
-  padding: 1px 7px;
-  background: var(--accent-soft);
-  border: 1px solid rgba(187, 154, 247, 0.35);
-  border-radius: var(--radius);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .file-menu-dirty {
   color: var(--accent);
   font-size: 9px;
   line-height: 1;
-}
-
-.file-dropdown {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 0;
-  min-width: 288px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-pop);
-  z-index: 9999;
-  font-size: 13.5px;
-  padding: 6px;
 }
 
 .file-dropdown-section {
@@ -628,71 +517,6 @@ button.pill {
   height: 1px;
   background: var(--border);
   margin: 5px 8px;
-}
-
-.file-dropdown-form {
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.file-dropdown-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-1);
-}
-
-.file-dropdown-subtitle {
-  font-size: 11.5px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-dropdown-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-
-.file-dropdown-btn {
-  border: 1px solid var(--border-strong);
-  background: var(--bg-btn);
-  color: var(--text-1);
-  border-radius: var(--radius-btn);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  padding: 6px 16px;
-  transition:
-    background 0.12s,
-    color 0.12s,
-    border-color 0.12s;
-}
-
-.file-dropdown-btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg-app);
-  font-weight: 700;
-}
-
-.file-dropdown-btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.file-dropdown-btn.primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.file-dropdown-btn.secondary:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .file-dropdown-list {
@@ -782,6 +606,19 @@ button.pill {
   border: 1px solid var(--red-border);
   border-radius: var(--radius);
   word-break: break-word;
+}
+
+.files-section .file-dropdown-item {
+  align-self: stretch;
+}
+
+.files-separator {
+  align-self: stretch;
+  margin: 2px 0;
+}
+
+.files-recents {
+  align-self: stretch;
 }
 
 /* ── Modals ────────────────────────────────────────────── */

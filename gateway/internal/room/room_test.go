@@ -533,3 +533,66 @@ func TestRoom_GcCommitFromGuestIsDropped(t *testing.T) {
 	r.Leave(guest, nil)
 	<-runDone
 }
+
+func TestRoom_HostSnapshotWithoutPendingRequestBroadcastsToPeers(t *testing.T) {
+	// Mid-session file open: the host re-seeds the room with an unsolicited
+	// snapshot; every guest must receive it (no join replay in flight).
+	r := New("room-snap-broadcast", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-snap-broadcast", "hostname", nil)
+	guest := client.New("2", "room-snap-broadcast", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	snap := []byte{wire.PrefixSnapshot, 0xAA, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: host, Data: snap}
+
+	select {
+	case f := <-guest.SendChan():
+		if !bytes.Equal(f, snap) {
+			t.Fatalf("guest received %x, want snapshot %x", f, snap)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("guest did not receive host snapshot broadcast")
+	}
+
+	select {
+	case f := <-host.SendChan():
+		t.Fatalf("host received its own snapshot back: %x", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}
+
+func TestRoom_SnapshotFromGuestIsDropped(t *testing.T) {
+	r := New("room-snap-guest", gatewaymetrics.New())
+	runDone := make(chan struct{})
+	go func() { r.Run(); close(runDone) }()
+
+	host := client.New("1", "room-snap-guest", "hostname", nil)
+	guest := client.New("2", "room-snap-guest", "guestname", nil)
+	_ = r.Join(host)
+	_ = r.Join(guest)
+	_ = drainFrames(host)
+	_ = drainFrames(guest)
+
+	snap := []byte{wire.PrefixSnapshot, 0xAA, 0xBB}
+	r.Ops() <- BroadcastMsg{Sender: guest, Data: snap}
+
+	select {
+	case f := <-host.SendChan():
+		t.Fatalf("host received guest-authored snapshot %x, want drop", f)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	r.Leave(host, nil)
+	r.Leave(guest, nil)
+	<-runDone
+}

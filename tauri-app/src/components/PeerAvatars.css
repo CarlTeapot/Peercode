@@ -1,0 +1,47 @@
+/* ── Topbar peer avatar stack ──────────────────────────── */
+
+.peer-avatars {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.peer-avatars:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow);
+}
+
+.peer-avatar-chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  /* bg-app is dark-on-pastel in dark mode, light-on-saturated in light mode */
+  color: var(--bg-app);
+  user-select: none;
+}
+
+.peer-avatar-chip + .peer-avatar-chip {
+  margin-left: -8px;
+}
+
+.peer-avatar-chip.host {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.peer-avatar-chip.more {
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11px;
+}

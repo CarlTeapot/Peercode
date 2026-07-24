@@ -11,9 +11,6 @@ interface StatusLineProps {
   roomId: string | null;
   /** Best shareable URL (public if tunneled, else LAN); click-to-copy. */
   shareUrl: string | null;
-  peerCount: number;
-  inSession: boolean;
-  onPeersClick: () => void;
   fileName: string | null;
   dirty: boolean;
   hadCrlf: boolean;
@@ -27,15 +24,12 @@ interface StatusLineProps {
 
 /**
  * Neovim-style statusline: role segment, file + dirty marker and read-only
- * flag on the left; room/peers/connection/EOL/cursor segments on the right.
+ * flag on the left; room/connection/EOL/cursor segments on the right.
  */
 export function StatusLine({
   sessionStatus,
   roomId,
   shareUrl,
-  peerCount,
-  inSession,
-  onPeersClick,
   fileName,
   dirty,
   hadCrlf,
@@ -105,15 +99,6 @@ export function StatusLine({
           ) : (
             <span className="sl-seg">room {roomId}</span>
           ))}
-        {inSession && (
-          <button
-            className="sl-seg"
-            onClick={onPeersClick}
-            title="Show peers panel"
-          >
-            {peerCount} {peerCount === 1 ? "peer" : "peers"}
-          </button>
-        )}
         <span className="sl-seg" title={connTitle}>
           <span className={`sl-conn-dot ${connClass}`} />
         </span>

@@ -1,0 +1,67 @@
+/* ── Left icon rail ────────────────────────────────────── */
+
+.side-rail {
+  width: 48px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 7px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+}
+
+.rail-btn {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition:
+    color 0.12s,
+    background 0.12s;
+}
+
+.rail-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
+.rail-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.rail-btn.active::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.rail-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-glow);
+}
+
+.rail-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.rail-spacer {
+  flex: 1;
+}

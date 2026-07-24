@@ -199,5 +199,8 @@ export function useFileMenu(
     removeRecent,
     reveal,
     fork,
+    refreshAll,
   };
 }
+
+export type FileMenuApi = ReturnType<typeof useFileMenu>;
